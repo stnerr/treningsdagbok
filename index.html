@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-  <title>🏃 Norwegian Method – Treningsdagbok</title>
+  <title>Treningsdagbok</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#ffffff">
@@ -11,17 +11,19 @@
     *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
     body{background:#f0f4f8;font-family:'Segoe UI',system-ui,sans-serif;}
     input,select,textarea,button{font-family:inherit;}
+    input[type=number]::-webkit-inner-spin-button{opacity:1;}
   </style>
 </head>
 <body>
   <div id="root"></div>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <script type="text/babel" data-presets="react">
-const { useState, useEffect, useRef } = React;
-
-// ─── LIGHT PALETTE ───────────────────────────────────────────────────────────
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script>
+window.SUPABASE_URL = localStorage.getItem("nm_supabase_url") ? JSON.parse(localStorage.getItem("nm_supabase_url")) : "";
+window.SUPABASE_ANON_KEY = localStorage.getItem("nm_supabase_key") ? JSON.parse(localStorage.getItem("nm_supabase_key")) : "";
+  </script>
+  <script>
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
 const C = {
   bg: "#f0f4f8",
   surface: "#ffffff",
@@ -32,1146 +34,3245 @@ const C = {
   green: "#16a34a",
   greenLight: "#f0fdf4",
   yellow: "#d97706",
-  yellowLight: "#fffbeb",
   red: "#dc2626",
-  redLight: "#fef2f2",
   orange: "#ea580c",
   text: "#1e293b",
   muted: "#64748b",
   white: "#ffffff",
-  shadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
+  shadow: "0 1px 3px rgba(0,0,0,0.08)"
 };
-
-const DAYS = ["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
-const DAYS_SHORT = ["Søn","Man","Tir","Ons","Tor","Fre","Lør"];
-const MONTHS = ["januar","februar","mars","april","mai","juni","juli","august","september","oktober","november","desember"];
-const MONTHS_SHORT = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
-
+const DAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
+const DAYS_SHORT = ["Søn", "Man", "Tir", "Ons", "Tor", "Fre", "Lør"];
+const MONTHS = ["januar", "februar", "mars", "april", "mai", "juni", "juli", "august", "september", "oktober", "november", "desember"];
+const MONTHS_SHORT = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
 const DEFAULT_WEEKLY = {
-  1: [{ type:"intervals", label:"🏃 Intervaller", desc:"2x4 min @ 5k-pace, 4x1 min @ mile-pace, 90s pause", intensity:"hard" }],
-  2: [{ type:"strength", label:"💪 Styrke", desc:"Rolig styrke + sykling/svømming", intensity:"easy" }],
-  3: [{ type:"easy", label:"🌿 Rolig jogging", desc:"Aerob terskel, snakketempo, 45–60 min", intensity:"easy" }],
-  4: [{ type:"intervals", label:"🏃 Intervaller", desc:"5x6 min @ terskel, 2 min pause", intensity:"hard" }],
-  5: [{ type:"bike", label:"🚴 Sykkel / Fri", desc:"Lett sykkeltur eller hviledag", intensity:"easy" }],
-  6: [{ type:"long", label:"🏔️ Langtur", desc:"Rolig langtur, bygg utholdenhets-base", intensity:"medium" }],
-  0: [],
+  1: [{
+    type: "intervals",
+    label: "🏃 Intervaller",
+    desc: "Terskelintervaller",
+    intensity: "hard"
+  }],
+  2: [{
+    type: "strength",
+    label: "💪 Styrke",
+    desc: "Styrke + alternativ trening",
+    intensity: "easy"
+  }],
+  3: [{
+    type: "easy",
+    label: "🌿 Rolig jogging",
+    desc: "Aerob base, snakketempo",
+    intensity: "easy"
+  }],
+  4: [{
+    type: "intervals",
+    label: "🏃 Intervaller",
+    desc: "Terskelintervaller",
+    intensity: "hard"
+  }],
+  5: [{
+    type: "bike",
+    label: "🚴 Sykkel / Fri",
+    desc: "Lett sykkel eller hvile",
+    intensity: "easy"
+  }],
+  6: [{
+    type: "long",
+    label: "🏔️ Langtur",
+    desc: "Rolig langtur",
+    intensity: "medium"
+  }],
+  0: []
 };
-
 const NUTRITION = {
-  intervals:{ before:"2–3t før: havregrøt + banan + honning. 30 min før: isotonisk drikke (500ml).", during:"Gel hvert 20 min ved økt >45 min. 150–200ml vann hvert 15 min.", after:"Innen 30 min: 20–25g protein + enkle karbohydrater.", general:"Høy-karbo dag. 7–10g karbo/kg. Jern: rødt kjøtt/linser + C-vitamin." },
-  easy:{ before:"1–2t før: brød + peanøttsmør eller yoghurt + granola.", during:"Vann holder for < 60 min.", after:"Normalt måltid med protein og grønnsaker.", general:"Balansert dag. 5–7g karbo/kg. Fokus på jern, B12, D-vitamin." },
-  long:{ before:"Kvelden før: pasta/ris. Morgen: havregrøt + frukt + kaffe.", during:"30–60g karbo/t etter første time.", after:"Recovery: 1:4 protein/karbo-ratio innen 30 min.", general:"Karbolasting 2 dager før. Rehydrer neste dag." },
-  bike:{ before:"Lett måltid 1t før.", during:"Vann + elektrolytter.", after:"Normalt restitusjonsmåltid.", general:"Lett dag: grønnsaker, omega-3, antioksidanter." },
-  strength:{ before:"Protein + karbo 1–2t før.", during:"Vann.", after:"20–30g protein innen 30 min.", general:"Styrkedag: 1.8–2.2g protein/kg. Kreatin kan vurderes." },
-  rest:{ before:"–", during:"–", after:"–", general:"Lavere kaloribehov. Antioksidanter, omega-3, søvnforberedelse." },
+  intervals: {
+    before: "2–3t før: havregrøt + banan + honning. 30 min før: isotonisk drikke.",
+    during: "Gel hvert 20 min >45 min. 150–200ml vann/15 min.",
+    after: "Innen 30 min: 20–25g protein + enkle karbohydrater.",
+    general: "Høy-karbo dag: 7–10g/kg. Jern: rødt kjøtt/linser + C-vitamin."
+  },
+  easy: {
+    before: "1–2t før: brød + peanøttsmør eller yoghurt + granola.",
+    during: "Vann holder <60 min. Elektrolytter ved varmt vær.",
+    after: "Normalt måltid med protein og grønnsaker.",
+    general: "5–7g karbo/kg. Fokus på jern, B12, D-vitamin."
+  },
+  long: {
+    before: "Kvelden før: pasta/ris. Morgen: havregrøt + frukt + kaffe.",
+    during: "30–60g karbo/t etter første time.",
+    after: "Recovery: 1:4 protein/karbo innen 30 min.",
+    general: "Karbolasting 2 dager før. Rehydrer neste dag."
+  },
+  bike: {
+    before: "Lett måltid 1t før.",
+    during: "Vann + elektrolytter.",
+    after: "Normalt restitusjonsmåltid.",
+    general: "Grønnsaker, omega-3, antioksidanter."
+  },
+  strength: {
+    before: "Protein + karbo 1–2t før.",
+    during: "Vann.",
+    after: "20–30g protein innen 30 min.",
+    general: "1.8–2.2g protein/kg. Kreatin kan vurderes."
+  },
+  rest: {
+    before: "–",
+    during: "–",
+    after: "–",
+    general: "Lavere kaloribehov. Antioksidanter, omega-3."
+  }
 };
-
 const RECOVERY = {
-  intervals:{ hours:"36–48 timer", tips:["Isfolie på legg/knær","Proteinrik snack før leggetid","Skumrulling + tøying","Sov 8+ timer"] },
-  easy:{ hours:"12–18 timer", tips:["Lett stretching","Hydrering","Normal søvn"] },
-  long:{ hours:"48–72 timer", tips:["Kompresjonssokker","Kald fotbad 10–15 min","Ekstra protein og jern","9 timers søvn"] },
-  bike:{ hours:"6–12 timer", tips:["Lav belastning, rask restitusjon"] },
-  strength:{ hours:"24–36 timer", tips:["Protein viktig","Unngå hard løping dagen etter"] },
-  rest:{ hours:"–", tips:["Nyt hvilen!"] },
+  intervals: {
+    hours: "36–48 timer",
+    tips: ["Isfolie på legg/knær", "Proteinrik snack før leggetid", "Skumrulling + tøying", "Sov 8+ timer"]
+  },
+  easy: {
+    hours: "12–18 timer",
+    tips: ["Lett stretching", "Hydrering"]
+  },
+  long: {
+    hours: "48–72 timer",
+    tips: ["Kompresjonssokker", "Kald fotbad 10–15 min", "Ekstra protein og jern", "9 timers søvn"]
+  },
+  bike: {
+    hours: "6–12 timer",
+    tips: ["Lav belastning, rask restitusjon"]
+  },
+  strength: {
+    hours: "24–36 timer",
+    tips: ["Protein viktig", "Unngå hard løping dagen etter"]
+  },
+  rest: {
+    hours: "–",
+    tips: ["Nyt hvilen!"]
+  }
 };
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// ─── SUPABASE ─────────────────────────────────────────────────────────────────
+const SUPABASE_URL = window.SUPABASE_URL || "";
+const SUPABASE_KEY = window.SUPABASE_ANON_KEY || "";
+async function sbFetch(path, opts = {}) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return null;
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      ...opts,
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": opts.method === "POST" ? "return=minimal" : "return=representation",
+        ...(opts.headers || {})
+      }
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+async function loadFromSupabase(userId) {
+  const rows = await sbFetch(`training_data?user_id=eq.${encodeURIComponent(userId)}&select=key,value`);
+  if (!rows || !Array.isArray(rows)) return null;
+  const result = {};
+  for (const r of rows) {
+    try {
+      result[r.key] = JSON.parse(r.value);
+    } catch {
+      result[r.key] = r.value;
+    }
+  }
+  return result;
+}
+async function saveToSupabase(userId, key, value) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
+  await sbFetch(`training_data`, {
+    method: "POST",
+    headers: {
+      "Prefer": "resolution=merge-duplicates"
+    },
+    body: JSON.stringify({
+      user_id: userId,
+      key,
+      value: JSON.stringify(value),
+      updated_at: new Date().toISOString()
+    })
+  });
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 function todayStr() {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function formatDate(str) {
   if (!str) return "";
-  const d = new Date(str+"T00:00:00");
+  const d = new Date(str + "T00:00:00");
   return `${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-function dayOfWeek(str) { return new Date(str+"T00:00:00").getDay(); }
-function daysUntil(str) {
-  const t = new Date(); t.setHours(0,0,0,0);
-  return Math.round((new Date(str+"T00:00:00")-t)/86400000);
+function dayOfWeek(str) {
+  return new Date(str + "T00:00:00").getDay();
 }
+function daysUntil(str) {
+  const t = new Date();
+  t.setHours(0, 0, 0, 0);
+  return Math.round((new Date(str + "T00:00:00") - t) / 86400000);
+}
+function typeLabel(type) {
+  return type === "intervals" ? "🏃 Intervaller" : type === "easy" ? "🌿 Rolig jogging" : type === "long" ? "🏔️ Langtur" : type === "bike" ? "🚴 Sykkel" : type === "strength" ? "💪 Styrke" : "😴 Hvile";
+}
+function intensityColor(i) {
+  return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
+}
+
+// ─── GOAL-BASED SESSION SUGGESTIONS ──────────────────────────────────────────
+function getGoalSuggestions(goals, profile, dow) {
+  if (!goals || goals.length === 0) return DEFAULT_WEEKLY[dow] || [];
+  const goal = goals[0];
+  const days = daysUntil(goal.date);
+  const dist = parseFloat(goal.distanceKm) || 21.1;
+  const maxHr = parseFloat(profile?.maxHr) || 185;
+  const z4Low = Math.round(maxHr * 0.80);
+  const z4High = Math.round(maxHr * 0.90);
+  const z2Low = Math.round(maxHr * 0.60);
+  const z2High = Math.round(maxHr * 0.70);
+  const z3Low = Math.round(maxHr * 0.70);
+  const z3High = Math.round(maxHr * 0.80);
+
+  // Parse target pace
+  let targetPaceMin = null;
+  if (goal.targetTime && goal.distanceKm) {
+    const parts = goal.targetTime.split(":").map(Number);
+    const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60 : parts[0] + parts[1] / 60;
+    targetPaceMin = totalMin / parseFloat(goal.distanceKm);
+  }
+  function fmtPace(m) {
+    return `${Math.floor(m)}:${String(Math.round(m % 1 * 60)).padStart(2, "0")}`;
+  }
+  const threshPace = targetPaceMin ? fmtPace(targetPaceMin * 1.03) : null;
+  const easyPace = targetPaceMin ? fmtPace(targetPaceMin * 1.20) : null;
+  const longPace = targetPaceMin ? fmtPace(targetPaceMin * 1.15) : null;
+  const phase = days < 14 ? "taper" : days < 42 ? "peak" : "build";
+  const paceStr = threshPace ? ` · Terskeltemp: ${threshPace}/km` : "";
+  const easyStr = easyPace ? ` · Mål: ${easyPace}/km` : "";
+  const longStr = longPace ? ` · Mål: ${longPace}/km` : "";
+  const suggestions = {
+    build: {
+      1: [{
+        type: "intervals",
+        label: "🏃 Terskelintervaller",
+        desc: `5×5 min på terskel${paceStr} · Puls: ${z4Low}–${z4High} bpm`,
+        intensity: "hard"
+      }],
+      2: [{
+        type: "strength",
+        label: "💪 Styrke",
+        desc: "Knebøy, markløft, dips, pull-ups",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "easy",
+        label: "🌿 Rolig jogging",
+        desc: `Sone 2, snakketempo${easyStr} · Puls: ${z2Low}–${z2High} bpm`,
+        intensity: "easy"
+      }],
+      4: [{
+        type: "intervals",
+        label: "🏃 Terskelintervaller",
+        desc: `3×10 min på terskel${paceStr} · Puls: ${z4Low}–${z4High} bpm`,
+        intensity: "hard"
+      }],
+      5: [{
+        type: "bike",
+        label: "🚴 Rolig sykkel",
+        desc: "Aktiv restitusjon, lett tempo",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "long",
+        label: "🏔️ Langtur",
+        desc: `${Math.round(dist * 1.1)} km rolig${longStr} · Puls: ${z2Low}–${z3Low} bpm`,
+        intensity: "medium"
+      }],
+      0: []
+    },
+    peak: {
+      1: [{
+        type: "intervals",
+        label: "🏃 Race-pace intervaller",
+        desc: `6×1 km på race-tempo${threshPace ? ` (${threshPace}/km)` : ""} · Puls: ${z4Low}–${z4High} bpm`,
+        intensity: "hard"
+      }],
+      2: [{
+        type: "strength",
+        label: "💪 Lett styrke",
+        desc: "Vedlikehold, lette vekter",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "easy",
+        label: "🌿 Rolig jogging",
+        desc: `Aktiv restitusjon${easyStr} · Puls maks ${z2High} bpm`,
+        intensity: "easy"
+      }],
+      4: [{
+        type: "intervals",
+        label: "🏃 Kortintervaller",
+        desc: `10×400m rask${threshPace ? ` (~${fmtPace(targetPaceMin * 0.95)}/km)` : ""} · Puls: ${z4Low}–${maxHr} bpm`,
+        intensity: "hard"
+      }],
+      5: [{
+        type: "rest",
+        label: "😴 Hvile",
+        desc: "Full hvile eller lett gange",
+        intensity: "rest"
+      }],
+      6: [{
+        type: "long",
+        label: "🏔️ Langtur",
+        desc: `${Math.round(dist * 0.9)} km inkl. siste 5 km på race-tempo${threshPace ? ` (${threshPace}/km)` : ""} · Puls: ${z2Low}–${z4Low} bpm`,
+        intensity: "medium"
+      }],
+      0: []
+    },
+    taper: {
+      1: [{
+        type: "intervals",
+        label: "🏃 Korte aktiveringsintervaller",
+        desc: `4×200m rask · Puls: ${z4Low}–${z4High} bpm · Behold spensten`,
+        intensity: "hard"
+      }],
+      2: [{
+        type: "easy",
+        label: "🌿 Lett jogging",
+        desc: `20–30 min${easyStr}`,
+        intensity: "easy"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Hvile",
+        desc: "Full hvile – kroppen lader opp",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 Aktivering",
+        desc: `15–20 min rolig + 4×100m strides · Puls maks ${z3High} bpm`,
+        intensity: "easy"
+      }],
+      5: [{
+        type: "rest",
+        label: "😴 Hvile",
+        desc: "Legg ut klær og utstyr",
+        intensity: "rest"
+      }],
+      6: [{
+        type: "long",
+        label: "🏆 LØPSDAG!",
+        desc: `${goal.name} · Mål: ${goal.targetTime}${threshPace ? ` · ${threshPace}/km` : ""}`,
+        intensity: "hard"
+      }],
+      0: []
+    }
+  };
+  return suggestions[phase][dow] || DEFAULT_WEEKLY[dow] || [];
+}
+
+// ─── ANALYSIS ────────────────────────────────────────────────────────────────
+function analyzeDashboard({
+  hr,
+  hrv,
+  sleep,
+  feel,
+  sessions,
+  goals,
+  todayType,
+  profile
+}) {
+  const tips = [],
+    warnings = [];
+  const normHrv = parseFloat(profile?.normHrv) || 65;
+  const normHr = parseFloat(profile?.normHr) || 50;
+  if (hrv) {
+    const h = parseFloat(hrv),
+      diff = (h - normHrv) / normHrv * 100;
+    if (diff < -15) warnings.push(`⚠️ HRV ${h}ms er ${Math.abs(diff.toFixed(0))}% under din norm (${normHrv}ms). Vurder hvile eller lett økt.`);else if (diff > 15) tips.push(`✅ HRV ${h}ms over din norm – grønt lys for hard økt!`);else tips.push(`🟡 HRV normal (${h}ms). Gjennomfør planlagt økt.`);
+  }
+  if (hr) {
+    const diff = parseFloat(hr) - normHr;
+    if (diff > 7) warnings.push(`🔴 Hvilepuls ${hr} bpm er ${diff.toFixed(0)} over din norm. Mulig overtrening eller sykdom.`);else if (diff < -5) tips.push(`💚 Lav hvilepuls (${hr} bpm) – god aerob form.`);
+  }
+  if (sleep) {
+    const s = parseFloat(sleep);
+    if (s < 6) warnings.push("😴 Under 6t søvn nullstiller treningsgevinsten. Ta det rolig i dag.");else if (s >= 8) tips.push("🌙 God søvn – restitusjonen er optimal.");
+  }
+  if (feel) {
+    const f = parseInt(feel);
+    if (f <= 2) warnings.push("😕 Lav dagsform – bytt til lett alternativ i dag.");else if (f === 5) tips.push("🔥 Toppform – utnytt det!");
+  }
+  const now = new Date();
+  const last7 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 7);
+  const hard = last7.filter(s => s.type === "intervals");
+  const km = last7.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  if (hard.length >= 3) warnings.push(`🚨 ${hard.length} harde økter siste 7 dager – over anbefalt max (2).`);
+  if (km > 0) tips.push(`📊 ${km.toFixed(0)} km denne uken.`);
+  if (goals.length > 0) {
+    const g = goals[0],
+      days = daysUntil(g.date);
+    if (days > 0 && days < 14) tips.push(`🎯 ${days} dager til ${g.name}! Tapering: -40% volum, behold intensitet.`);else if (days > 0 && days < 30) tips.push(`🎯 ${days} dager til ${g.name}. Fokus på kvalitetsøkter og søvn.`);
+  }
+  if (!warnings.length && !tips.length) return ["Legg inn morgendata for personlige anbefalinger."];
+  return [...warnings, ...tips];
+}
+
+// ─── STORE HOOK ───────────────────────────────────────────────────────────────
 function useStore(key, init) {
-  const [val, setValRaw] = useState(() => {
-    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : init; } catch { return init; }
+  const [val, setValRaw] = React.useState(() => {
+    try {
+      const s = localStorage.getItem(key);
+      return s ? JSON.parse(s) : init;
+    } catch {
+      return init;
+    }
   });
-  const setVal = (v) => setValRaw(prev => {
-    const next = typeof v === "function" ? v(prev) : v;
-    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-    return next;
-  });
+  const pendingRef = React.useRef(null);
+  const setVal = React.useCallback((v, userId) => {
+    setValRaw(prev => {
+      const next = typeof v === "function" ? v(prev) : v;
+      try {
+        localStorage.setItem(key, JSON.stringify(next));
+      } catch {}
+      if (userId) {
+        clearTimeout(pendingRef.current);
+        pendingRef.current = setTimeout(() => saveToSupabase(userId, key, next), 1500);
+      }
+      return next;
+    });
+  }, [key]);
   return [val, setVal];
 }
 
 // ─── MINI COMPONENTS ─────────────────────────────────────────────────────────
-function Card({ children, style, onClick }) {
-  return <div onClick={onClick} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:16, boxShadow:C.shadow, cursor:onClick?"pointer":"default", ...style }}>{children}</div>;
+function Card({
+  children,
+  style,
+  onClick
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    onClick: onClick,
+    style: {
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 14,
+      padding: 16,
+      boxShadow: C.shadow,
+      cursor: onClick ? "pointer" : "default",
+      ...style
+    }
+  }, children);
 }
-function Badge({ label, color, bg }) {
-  return <span style={{ background:bg||color+"18", color, border:`1px solid ${color}33`, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:700 }}>{label}</span>;
+function Badge({
+  label,
+  color
+}) {
+  return /*#__PURE__*/React.createElement("span", {
+    style: {
+      background: color + "18",
+      color,
+      border: `1px solid ${color}33`,
+      borderRadius: 20,
+      padding: "2px 10px",
+      fontSize: 11,
+      fontWeight: 700
+    }
+  }, label);
 }
-function Stat({ label, value, unit, color=C.accent }) {
-  return (
-    <div style={{ textAlign:"center" }}>
-      <div style={{ fontSize:24, fontWeight:800, color, fontFamily:"monospace" }}>{value}<span style={{ fontSize:12, color:C.muted }}> {unit}</span></div>
-      <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{label}</div>
-    </div>
-  );
+function Stat({
+  label,
+  value,
+  unit,
+  color = C.accent
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 800,
+      color,
+      fontFamily: "monospace"
+    }
+  }, value, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: C.muted
+    }
+  }, " ", unit)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginTop: 2
+    }
+  }, label));
 }
-function Input({ label, value, onChange, type="text", step, placeholder, style }) {
-  return (
-    <div style={{ marginBottom:12 }}>
-      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
-      <input type={type} value={value} onChange={e=>onChange(e.target.value)} step={step} placeholder={placeholder}
-        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none", ...style }} />
-    </div>
-  );
+function Inp({
+  label,
+  value,
+  onChange,
+  type = "text",
+  step,
+  placeholder,
+  style
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, label && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginBottom: 4,
+      fontWeight: 600
+    }
+  }, label), /*#__PURE__*/React.createElement("input", {
+    type: type,
+    value: value,
+    onChange: e => onChange(e.target.value),
+    step: step,
+    placeholder: placeholder,
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: C.text,
+      fontSize: 14,
+      width: "100%",
+      boxSizing: "border-box",
+      outline: "none",
+      ...style
+    }
+  }));
 }
-function Textarea({ label, value, onChange, rows=3, placeholder }) {
-  return (
-    <div style={{ marginBottom:12 }}>
-      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
-      <textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows} placeholder={placeholder}
-        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:13, width:"100%", boxSizing:"border-box", resize:"vertical", outline:"none" }} />
-    </div>
-  );
+function Txta({
+  label,
+  value,
+  onChange,
+  rows = 3,
+  placeholder
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, label && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginBottom: 4,
+      fontWeight: 600
+    }
+  }, label), /*#__PURE__*/React.createElement("textarea", {
+    value: value,
+    onChange: e => onChange(e.target.value),
+    rows: rows,
+    placeholder: placeholder,
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: C.text,
+      fontSize: 13,
+      width: "100%",
+      boxSizing: "border-box",
+      resize: "vertical",
+      outline: "none"
+    }
+  }));
 }
-function Select({ label, value, onChange, options }) {
-  return (
-    <div style={{ marginBottom:12 }}>
-      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
-      <select value={value} onChange={e=>onChange(e.target.value)}
-        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none" }}>
-        {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
-  );
+function Sel({
+  label,
+  value,
+  onChange,
+  options
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, label && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginBottom: 4,
+      fontWeight: 600
+    }
+  }, label), /*#__PURE__*/React.createElement("select", {
+    value: value,
+    onChange: e => onChange(e.target.value),
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: C.text,
+      fontSize: 14,
+      width: "100%",
+      boxSizing: "border-box",
+      outline: "none"
+    }
+  }, options.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o.value,
+    value: o.value
+  }, o.label))));
 }
-function Btn({ children, onClick, color=C.accent, small, outline, style }) {
-  const bg = outline ? "transparent" : color;
-  return (
-    <button onClick={onClick} style={{
-      background: outline ? "transparent" : color+"18",
-      border:`1.5px solid ${color}`,
-      color: outline ? color : color,
-      borderRadius:8, padding:small?"5px 12px":"9px 18px",
-      fontSize:small?12:14, fontWeight:700, cursor:"pointer", transition:"all .15s", ...style
-    }}
-      onMouseEnter={e=>{ e.currentTarget.style.background=color+"30"; }}
-      onMouseLeave={e=>{ e.currentTarget.style.background=outline?"transparent":color+"18"; }}
-    >{children}</button>
-  );
+function Btn({
+  children,
+  onClick,
+  color = C.accent,
+  small,
+  outline,
+  style
+}) {
+  return /*#__PURE__*/React.createElement("button", {
+    onClick: onClick,
+    style: {
+      background: outline ? "transparent" : color + "18",
+      border: `1.5px solid ${color}`,
+      color,
+      borderRadius: 8,
+      padding: small ? "5px 12px" : "9px 18px",
+      fontSize: small ? 12 : 14,
+      fontWeight: 700,
+      cursor: "pointer",
+      transition: "all .15s",
+      ...style
+    },
+    onMouseEnter: e => {
+      e.currentTarget.style.background = color + "30";
+    },
+    onMouseLeave: e => {
+      e.currentTarget.style.background = outline ? "transparent" : color + "18";
+    }
+  }, children);
 }
-function typeLabel(type) {
-  return type==="intervals"?"🏃 Intervaller":type==="easy"?"🌿 Rolig jogging":type==="long"?"🏔️ Langtur":type==="bike"?"🚴 Sykkel":type==="strength"?"💪 Styrke":"😴 Hvile";
-}
-function intensityColor(intensity) {
-  return intensity==="hard"?C.red:intensity==="medium"?C.yellow:intensity==="easy"?C.green:C.muted;
-}
-
-// ─── ANALYSE ENGINE ──────────────────────────────────────────────────────────
-function analyzeDashboard({ hr, hrv, sleep, feel, sessions, goals, todayType, profile }) {
-  const tips=[], warnings=[];
-  const normHrv = parseFloat(profile?.normHrv)||65;
-  const normHr = parseFloat(profile?.normHr)||50;
-
-  if (hrv) {
-    const h=parseFloat(hrv), diff=((h-normHrv)/normHrv)*100;
-    if (diff<-15) warnings.push(`⚠️ HRV ${h}ms er ${Math.abs(diff.toFixed(0))}% under din norm (${normHrv}ms). Kroppen signaliserer stress. Vurder hvile eller lett økt.`);
-    else if (diff>15) tips.push(`✅ HRV ${h}ms er over din norm. Kroppen er klar – grønt lys for hard økt!`);
-    else tips.push(`🟡 HRV normal (${h}ms). Gjennomfør planlagt økt.`);
-  }
-  if (hr) {
-    const h=parseFloat(hr), diff=h-normHr;
-    if (diff>7) warnings.push(`🔴 Hvilepuls ${h} bpm er ${diff.toFixed(0)} over din norm. Mulig overtrening eller sykdom.`);
-    else if (h<normHr-5) tips.push(`💚 Lav hvilepuls (${h} bpm) – god aerob form og restitusjon.`);
-  }
-  if (sleep) {
-    const s=parseFloat(sleep);
-    if (s<6) warnings.push("😴 Under 6t søvn nullstiller treningsgevinsten. Ta det rolig i dag.");
-    else if (s>=8) tips.push("🌙 God søvn – restitusjonen er optimal.");
-  }
-  if (feel) {
-    const f=parseInt(feel);
-    if (f<=2) warnings.push("😕 Lav dagsform – bytt til lett alternativ i dag.");
-    else if (f===5) tips.push("🔥 Toppform – utnytt det!");
-  }
-  const now=new Date();
-  const last7=sessions.filter(s=>(now-new Date(s.date+"T00:00:00"))/86400000<=7);
-  const hard=last7.filter(s=>s.type==="intervals");
-  const km=last7.reduce((a,s)=>a+(parseFloat(s.km)||0),0);
-  if (hard.length>=3) warnings.push(`🚨 ${hard.length} harde økter siste 7 dager – over anbefalt max (2). Overtrening-risiko.`);
-  if (km>0) tips.push(`📊 ${km.toFixed(0)}km denne uken. Hold økning under 10%/uke.`);
-  if (todayType==="intervals") tips.push("🏃 Intervalldag: Varm opp 15–20 min. Kjør på terskelintensitet – korte setninger OK, ikke puste fritt.");
-  else if (todayType==="easy") tips.push("🌿 Rolig dag: Sone 1–2 hele veien. Snakketempo. Her bygges den aerobe basen.");
-  else if (todayType==="long") tips.push("🏔️ Langtur: Start og avslutt rolig. Ta med karbo fra km 45–60.");
-  if (goals.length>0) {
-    const g=goals[0], days=daysUntil(g.date);
-    if (days>0&&days<14) tips.push(`🎯 ${days} dager til ${g.name}! Tapering: reduser volum 40%, behold intensitet.`);
-    else if (days>0&&days<30) tips.push(`🎯 ${days} dager til ${g.name}. Fokus på kvalitetsøkter og søvn.`);
-  }
-  if (!warnings.length&&!tips.length) return ["Legg inn morgendata for personlige anbefalinger basert på Norwegian Method."];
-  return [...warnings,...tips];
-}
-
-function analyzeGoalProgress({ goal, sessions }) {
-  const lines=[];
-  const days=daysUntil(goal.date);
-  if (days<0) return ["Dette løpet er passert."];
-  const last4=sessions.filter(s=>(new Date()-new Date(s.date+"T00:00:00"))/86400000<=28);
-  const km=last4.reduce((a,s)=>a+(parseFloat(s.km)||0),0)/4;
-  const hard=last4.filter(s=>s.type==="intervals").length;
-  const easy=last4.filter(s=>["easy","bike","strength"].includes(s.type)).length;
-  const ratio=hard+easy>0?hard/(hard+easy):0;
-  const dist=parseFloat(goal.distanceKm)||0;
-  const rec=dist<10?30:dist<21.1?50:dist<42.2?70:80;
-  lines.push(`📅 ${days} dager til ${goal.name}`);
-  if (km<rec*0.6) lines.push(`📉 For lite volum: ${km.toFixed(0)}km/uke. Anbefalt: ~${rec}km/uke.`);
-  else if (km>rec*1.3) lines.push(`📈 Høyt volum (${km.toFixed(0)}km/uke). Skaderisiko – prioriter søvn.`);
-  else lines.push(`✅ Godt volum: ${km.toFixed(0)}km/uke.`);
-  if (ratio>0.35) lines.push(`⚠️ For mange harde økter (${Math.round(ratio*100)}%). Maks 20% etter Norwegian Method.`);
-  else if (ratio>0) lines.push(`✅ Intensitetsfordeling OK: ${Math.round(ratio*100)}% harde.`);
-  if (days<=14) lines.push("⬇️ TAPERING: -40–50% volum. Behold 1 terskeløkt. Sov mye.");
-  else if (days<=21) lines.push("🔧 3 uker igjen: Siste tøffe blokk nå, deretter nedtrapping.");
-  if (!last4.length) return [`Loggfør økter for å analysere fremgangen mot ${goal.name}.`];
-  return lines;
-}
-
-// ─── TABS ─────────────────────────────────────────────────────────────────────
-const TABS = [
-  { id:"dashboard", icon:"📊", label:"Dag" },
-  { id:"calendar", icon:"📅", label:"Kalender" },
-  { id:"log", icon:"✍️", label:"Logg" },
-  { id:"strength", icon:"💪", label:"Styrke" },
-  { id:"goals", icon:"🎯", label:"Mål" },
-  { id:"nutrition", icon:"🥗", label:"Mat" },
-  { id:"recovery", icon:"💤", label:"Restitusjon" },
-  { id:"strava", icon:"🟠", label:"Strava" },
-  { id:"profile", icon:"👤", label:"Profil" },
-];
+const SESSION_OPTS = [{
+  value: "intervals",
+  label: "🏃 Intervaller"
+}, {
+  value: "easy",
+  label: "🌿 Rolig jogging"
+}, {
+  value: "long",
+  label: "🏔️ Langtur"
+}, {
+  value: "bike",
+  label: "🚴 Sykkel"
+}, {
+  value: "strength",
+  label: "💪 Styrke"
+}, {
+  value: "rest",
+  label: "😴 Hvile"
+}];
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function DashboardTab({ sessions, morningData, setMorningData, goals, plannedSessions, profile }) {
-  const today=todayStr(), dow=dayOfWeek(today);
-  const todayPlans=(plannedSessions[today]||DEFAULT_WEEKLY[dow]||[]);
-  const todaySessions=sessions.filter(s=>s.date===today);
-  const todayMorning=morningData[today]||{};
-  const [saving,setSaving]=useState(false);
-  const [hr,setHr]=useState(todayMorning.hr||"");
-  const [hrv,setHrv]=useState(todayMorning.hrv||"");
-  const [sleep,setSleep]=useState(todayMorning.sleep||"");
-  const [feel,setFeel]=useState(todayMorning.feel||"3");
-
+function DashboardTab({
+  sessions,
+  morningData,
+  setMorningData,
+  goals,
+  plannedSessions,
+  profile,
+  userId
+}) {
+  const today = todayStr(),
+    dow = dayOfWeek(today);
+  const todayPlans = plannedSessions[today] !== undefined ? plannedSessions[today] : getGoalSuggestions(goals, profile, dow);
+  const todaySessions = sessions.filter(s => s.date === today);
+  const todayMorning = morningData[today] || {};
+  const [saving, setSaving] = React.useState(false);
+  const [hr, setHr] = React.useState(todayMorning.hr || "");
+  const [hrv, setHrv] = React.useState(todayMorning.hrv || "");
+  const [sleep, setSleep] = React.useState(todayMorning.sleep || "");
+  const [feel, setFeel] = React.useState(todayMorning.feel || "3");
+  const [showNut, setShowNut] = React.useState(false);
+  const [showRec, setShowRec] = React.useState(false);
   function saveMorning() {
     setSaving(true);
-    setMorningData(prev=>({...prev,[today]:{hr,hrv,sleep,feel}}));
-    setTimeout(()=>setSaving(false),800);
+    setMorningData(prev => ({
+      ...prev,
+      [today]: {
+        hr,
+        hrv,
+        sleep,
+        feel
+      }
+    }), userId);
+    setTimeout(() => setSaving(false), 800);
   }
-
-  const todayType=todayPlans[0]?.type||"easy";
-  const analysisParts=analyzeDashboard({hr,hrv,sleep,feel,sessions,goals,todayType,profile});
-  const recentKm=sessions.filter(s=>(new Date()-new Date(s.date))/86400000<=7).reduce((a,s)=>a+(parseFloat(s.km)||0),0);
-
-  // HR score vs norm
-  const normHr=parseFloat(profile?.normHr)||50;
-  const hrDiff=hr?parseFloat(hr)-normHr:null;
-  const hrColor=hrDiff===null?C.muted:hrDiff>7?C.red:hrDiff>3?C.yellow:C.green;
-
-  return (
-    <div>
-      <div style={{ marginBottom:4, color:C.muted, fontSize:13 }}>{DAYS[dow]} {formatDate(today)}</div>
-      <h2 style={{ color:C.text, fontSize:22, margin:"0 0 16px", fontWeight:800 }}>God morgen! 👋</h2>
-
-      {/* Today's sessions */}
-      <Card style={{ marginBottom:12, borderLeft:`4px solid ${todayPlans[0]?.intensity==="hard"?C.red:C.accent}` }}>
-        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:8 }}>DAGENS PLAN</div>
-        {todayPlans.length===0
-          ? <div style={{ color:C.muted }}>😴 Hviledag</div>
-          : todayPlans.map((p,i)=>{
-              const done=todaySessions.some(s=>s.type===p.type);
-              return (
-                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:i<todayPlans.length-1?`1px solid ${C.border}`:"none" }}>
-                  <div>
-                    <div style={{ fontWeight:700, color:intensityColor(p.intensity) }}>{p.label}</div>
-                    <div style={{ fontSize:12, color:C.muted }}>{p.desc}</div>
-                  </div>
-                  {done?<Badge label="✓ Utført" color={C.green}/>:<Badge label="Planlagt" color={C.accent}/>}
-                </div>
-              );
-            })
-        }
-      </Card>
-
-      {/* Morning data */}
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:10 }}>MORGENREGISTRERING</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-          <Input label="Hvilepuls (bpm)" type="number" value={hr} onChange={setHr} placeholder={`norm: ${profile?.normHr||50}`} />
-          <Input label="HRV (ms)" type="number" value={hrv} onChange={setHrv} placeholder={`norm: ${profile?.normHrv||65}`} />
-          <Input label="Søvn (timer)" type="number" step="0.5" value={sleep} onChange={setSleep} placeholder="7.5" />
-          <div>
-            <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:6 }}>Dagsform</div>
-            <div style={{ display:"flex", gap:4 }}>
-              {[1,2,3,4,5].map(n=>(
-                <div key={n} onClick={()=>setFeel(String(n))} style={{
-                  flex:1, height:36, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center",
-                  cursor:"pointer", background:feel===String(n)?C.accent+"22":C.bg,
-                  border:`1.5px solid ${feel===String(n)?C.accent:C.border}`, fontSize:16
-                }}>{["😴","😕","😐","😊","🔥"][n-1]}</div>
-              ))}
-            </div>
-          </div>
-        </div>
-        <Btn onClick={saveMorning} small color={C.green} style={{ marginTop:4 }}>{saving?"Lagret ✓":"Lagre morgendata"}</Btn>
-      </Card>
-
-      {/* Stats */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
-        <Card style={{ padding:12 }}><Stat label="Km/uke" value={recentKm.toFixed(0)} unit="km" /></Card>
-        <Card style={{ padding:12 }}><Stat label="Hvilepuls" value={hr||"–"} unit="" color={hrColor} /></Card>
-        <Card style={{ padding:12 }}><Stat label="HRV" value={hrv||"–"} unit="ms" color={C.green} /></Card>
-      </div>
-
-      {/* Analysis */}
-      <Card style={{ borderLeft:`4px solid ${C.accent}` }}>
-        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:10 }}>📊 DAGENS ANALYSE – NORWEGIAN METHOD</div>
-        {analysisParts.map((part,i)=>{
-          const warn=part.startsWith("⚠️")||part.startsWith("🔴")||part.startsWith("🚨");
-          const good=part.startsWith("✅")||part.startsWith("💚")||part.startsWith("🟢");
-          return <div key={i} style={{ fontSize:13, color:warn?C.red:good?C.green:C.text, lineHeight:1.6, padding:"5px 0", borderBottom:i<analysisParts.length-1?`1px solid ${C.border}`:"none" }}>{part}</div>;
-        })}
-      </Card>
-    </div>
-  );
+  const todayType = todayPlans[0]?.type || "easy";
+  const analysisParts = analyzeDashboard({
+    hr,
+    hrv,
+    sleep,
+    feel,
+    sessions,
+    goals,
+    todayType,
+    profile
+  });
+  const recentKm = sessions.filter(s => (new Date() - new Date(s.date + "T00:00:00")) / 86400000 <= 7).reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const normHr = parseFloat(profile?.normHr) || 50;
+  const hrDiff = hr ? parseFloat(hr) - normHr : null;
+  const hrColor = hrDiff === null ? C.muted : hrDiff > 7 ? C.red : hrDiff > 3 ? C.yellow : C.green;
+  const nut = NUTRITION[todayType] || NUTRITION.easy;
+  const rec = sessions[0] ? RECOVERY[sessions[0].type] || RECOVERY.easy : null;
+  const hvData = Object.entries(morningData).sort(([a], [b]) => a.localeCompare(b)).slice(-7);
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 4,
+      color: C.muted,
+      fontSize: 13
+    }
+  }, DAYS[dow], " ", formatDate(today)), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      color: C.text,
+      fontSize: 20,
+      margin: "0 0 14px",
+      fontWeight: 800
+    }
+  }, "God morgen! \uD83D\uDC4B"), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12,
+      borderLeft: `4px solid ${todayPlans[0]?.intensity === "hard" ? C.red : C.accent}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "DAGENS PLAN"), todayPlans.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.muted
+    }
+  }, "\uD83D\uDE34 Hviledag") : todayPlans.map((p, i) => {
+    const done = todaySessions.some(s => s.type === p.type);
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        padding: "6px 0",
+        borderBottom: i < todayPlans.length - 1 ? `1px solid ${C.border}` : "none"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        color: intensityColor(p.intensity),
+        fontSize: 14
+      }
+    }, p.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 2
+      }
+    }, p.desc)), done ? /*#__PURE__*/React.createElement(Badge, {
+      label: "\u2713 Utf\xF8rt",
+      color: C.green
+    }) : /*#__PURE__*/React.createElement(Badge, {
+      label: "Planlagt",
+      color: C.accent
+    })));
+  })), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "MORGENREGISTRERING"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: `Hvilepuls (norm: ${profile?.normHr || 50})`,
+    type: "number",
+    value: hr,
+    onChange: setHr,
+    placeholder: "bpm"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: `HRV (norm: ${profile?.normHrv || 65})`,
+    type: "number",
+    value: hrv,
+    onChange: setHrv,
+    placeholder: "ms"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "S\xF8vn (timer)",
+    type: "number",
+    step: "0.5",
+    value: sleep,
+    onChange: setSleep,
+    placeholder: "7.5"
+  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 6
+    }
+  }, "Dagsform"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 4
+    }
+  }, [1, 2, 3, 4, 5].map(n => /*#__PURE__*/React.createElement("div", {
+    key: n,
+    onClick: () => setFeel(String(n)),
+    style: {
+      flex: 1,
+      height: 36,
+      borderRadius: 8,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      cursor: "pointer",
+      background: feel === String(n) ? C.accent + "22" : C.bg,
+      border: `1.5px solid ${feel === String(n) ? C.accent : C.border}`,
+      fontSize: 16
+    }
+  }, ["😴", "😕", "😐", "😊", "🔥"][n - 1]))))), /*#__PURE__*/React.createElement(Btn, {
+    onClick: saveMorning,
+    small: true,
+    color: C.green,
+    style: {
+      marginTop: 4
+    }
+  }, saving ? "Lagret ✓" : "Lagre morgendata")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3,1fr)",
+      gap: 10,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(Card, {
+    style: {
+      padding: 12
+    }
+  }, /*#__PURE__*/React.createElement(Stat, {
+    label: "Km/uke",
+    value: recentKm.toFixed(0),
+    unit: "km"
+  })), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      padding: 12
+    }
+  }, /*#__PURE__*/React.createElement(Stat, {
+    label: "Hvilepuls",
+    value: hr || "–",
+    unit: "",
+    color: hrColor
+  })), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      padding: 12
+    }
+  }, /*#__PURE__*/React.createElement(Stat, {
+    label: "HRV",
+    value: hrv || "–",
+    unit: "ms",
+    color: C.green
+  }))), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12,
+      borderLeft: `4px solid ${C.accent}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "\uD83D\uDCCA DAGENS ANALYSE"), analysisParts.map((part, i) => {
+    const warn = part.startsWith("⚠️") || part.startsWith("🔴") || part.startsWith("🚨");
+    const good = part.startsWith("✅") || part.startsWith("💚") || part.startsWith("🟢");
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        fontSize: 13,
+        color: warn ? C.red : good ? C.green : C.text,
+        lineHeight: 1.6,
+        padding: "5px 0",
+        borderBottom: i < analysisParts.length - 1 ? `1px solid ${C.border}` : "none"
+      }
+    }, part);
+  })), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      cursor: "pointer"
+    },
+    onClick: () => setShowNut(p => !p)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.text
+    }
+  }, "\uD83E\uDD57 Ern\xE6ring i dag"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.muted,
+      fontSize: 18
+    }
+  }, showNut ? "∧" : "∨")), showNut && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 12
+    }
+  }, [{
+    t: "🌅 Før økt",
+    c: nut.before
+  }, {
+    t: "🏃 Under",
+    c: nut.during
+  }, {
+    t: "✅ Etter",
+    c: nut.after
+  }, {
+    t: "📅 Hele dagen",
+    c: nut.general
+  }].map(({
+    t,
+    c
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: t,
+    style: {
+      padding: "8px 0",
+      borderBottom: `1px solid ${C.border}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 3
+    }
+  }, t), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: C.text,
+      lineHeight: 1.5
+    }
+  }, c))))), /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      cursor: "pointer"
+    },
+    onClick: () => setShowRec(p => !p)
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 700,
+      color: C.text
+    }
+  }, "\uD83D\uDCA4 Restitusjon"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.muted,
+      fontSize: 18
+    }
+  }, showRec ? "∧" : "∨")), showRec && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 12
+    }
+  }, rec && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.yellow,
+      fontWeight: 700,
+      marginBottom: 6
+    }
+  }, "\u23F1 ", rec.hours, " etter siste \xF8kt"), rec.tips.map(tip => /*#__PURE__*/React.createElement("div", {
+    key: tip,
+    style: {
+      fontSize: 13,
+      padding: "3px 0"
+    }
+  }, "\u2022 ", tip))), hvData.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 6
+    }
+  }, "SISTE 7 DAGER"), hvData.map(([date, m]) => /*#__PURE__*/React.createElement("div", {
+    key: date,
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      padding: "4px 0",
+      borderBottom: `1px solid ${C.border}`,
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.muted
+    }
+  }, DAYS_SHORT[dayOfWeek(date)]), /*#__PURE__*/React.createElement("span", null, m.hr ? `❤️ ${m.hr}bpm` : ""), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.green
+    }
+  }, m.hrv ? `HRV ${m.hrv}ms` : ""), /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.muted
+    }
+  }, m.sleep ? `😴 ${m.sleep}t` : "")))))));
 }
 
 // ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
-function CalendarTab({ plannedSessions, setPlannedSessions, sessions }) {
-  const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "list"
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const d=new Date(); return { year:d.getFullYear(), month:d.getMonth() };
+function CalendarTab({
+  plannedSessions,
+  setPlannedSessions,
+  sessions,
+  goals,
+  profile,
+  userId
+}) {
+  const [viewMode, setViewMode] = React.useState("calendar");
+  const [currentMonth, setCurrentMonth] = React.useState(() => {
+    const d = new Date();
+    return {
+      year: d.getFullYear(),
+      month: d.getMonth()
+    };
   });
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [editingSessions, setEditingSessions] = useState([]); // sessions for selected date
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [newSession, setNewSession] = useState({ type:"easy", label:"", desc:"", intensity:"easy" });
+  const [selectedDate, setSelectedDate] = React.useState(null);
+  const [editingSessions, setEditingSessions] = React.useState([]);
+  const [showAddForm, setShowAddForm] = React.useState(false);
+  const [newSession, setNewSession] = React.useState({
+    type: "easy",
+    label: "",
+    desc: "",
+    intensity: "easy"
+  });
   const today = todayStr();
-
-  function dateStr(year, month, day) {
-    return `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  function dateStr(y, m, d) {
+    return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   }
-
-  function getSessionsForDate(date) {
+  function getPlans(date) {
     const dow = dayOfWeek(date);
-    return plannedSessions[date] !== undefined ? plannedSessions[date] : (DEFAULT_WEEKLY[dow] || []);
+    return plannedSessions[date] !== undefined ? plannedSessions[date] : getGoalSuggestions(goals, profile, dow);
   }
-
-  function getDoneSessionsForDate(date) {
+  function getDone(date) {
     return sessions.filter(s => s.date === date);
   }
-
   function openDate(date) {
     setSelectedDate(date);
-    setEditingSessions([...getSessionsForDate(date)]);
+    setEditingSessions([...getPlans(date)]);
     setShowAddForm(false);
   }
-
   function saveDate() {
-    setPlannedSessions(prev => ({ ...prev, [selectedDate]: editingSessions }));
+    setPlannedSessions(prev => ({
+      ...prev,
+      [selectedDate]: editingSessions
+    }), userId);
     setSelectedDate(null);
   }
-
-  function removeSession(i) {
-    setEditingSessions(prev => prev.filter((_,idx)=>idx!==i));
-  }
-
   function addSession() {
     const label = newSession.label || typeLabel(newSession.type);
-    setEditingSessions(prev => [...prev, { ...newSession, label }]);
-    setNewSession({ type:"easy", label:"", desc:"", intensity:"easy" });
+    setEditingSessions(p => [...p, {
+      ...newSession,
+      label
+    }]);
+    setNewSession({
+      type: "easy",
+      label: "",
+      desc: "",
+      intensity: "easy"
+    });
     setShowAddForm(false);
   }
-
-  // Build calendar grid
-  const { year, month } = currentMonth;
+  const {
+    year,
+    month
+  } = currentMonth;
   const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const prevMonth = () => setCurrentMonth(p => p.month===0?{year:p.year-1,month:11}:{...p,month:p.month-1});
-  const nextMonth = () => setCurrentMonth(p => p.month===11?{year:p.year+1,month:0}:{...p,month:p.month+1});
-
-  // LIST VIEW – next 60 days
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevMonth = () => setCurrentMonth(p => p.month === 0 ? {
+    year: p.year - 1,
+    month: 11
+  } : {
+    ...p,
+    month: p.month - 1
+  });
+  const nextMonth = () => setCurrentMonth(p => p.month === 11 ? {
+    year: p.year + 1,
+    month: 0
+  } : {
+    ...p,
+    month: p.month + 1
+  });
+  function EditModal() {
+    if (!selectedDate) return null;
+    const done = getDone(selectedDate);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        zIndex: 200,
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.surface,
+        borderRadius: "20px 20px 0 0",
+        padding: 20,
+        width: "100%",
+        maxWidth: 520,
+        maxHeight: "80vh",
+        overflowY: "auto"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 14
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 800,
+        fontSize: 16
+      }
+    }, DAYS[dayOfWeek(selectedDate)]), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 13,
+        color: C.muted
+      }
+    }, formatDate(selectedDate))), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setSelectedDate(null),
+      small: true,
+      color: C.muted
+    }, "\u2715")), done.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.green,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, "GJENNOMF\xD8RT"), done.map((s, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        background: "#f0fdf4",
+        borderRadius: 8,
+        padding: "6px 10px",
+        marginBottom: 4,
+        fontSize: 13,
+        color: C.green,
+        fontWeight: 600
+      }
+    }, "\u2713 ", typeLabel(s.type), s.km ? ` · ${s.km}km` : "", s.avgPace ? ` · ${s.avgPace}/km` : ""))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.muted,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, "PLANLAGTE \xD8KTER"), editingSessions.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.muted,
+        fontSize: 13,
+        marginBottom: 8
+      }
+    }, "Ingen \xF8kt planlagt"), editingSessions.map((s, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        background: C.bg,
+        borderRadius: 8,
+        padding: "8px 10px",
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        color: intensityColor(s.intensity),
+        fontSize: 13
+      }
+    }, s.label), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted
+      }
+    }, s.desc)), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setEditingSessions(p => p.filter((_, idx) => idx !== i)),
+      small: true,
+      color: C.red
+    }, "\u2715"))), showAddForm ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.bg,
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement(Sel, {
+      label: "Type",
+      value: newSession.type,
+      onChange: v => setNewSession(p => ({
+        ...p,
+        type: v,
+        label: typeLabel(v)
+      })),
+      options: SESSION_OPTS
+    }), /*#__PURE__*/React.createElement(Inp, {
+      label: "Navn (valgfritt)",
+      value: newSession.label,
+      onChange: v => setNewSession(p => ({
+        ...p,
+        label: v
+      })),
+      placeholder: typeLabel(newSession.type)
+    }), /*#__PURE__*/React.createElement(Inp, {
+      label: "Beskrivelse / intensitet",
+      value: newSession.desc,
+      onChange: v => setNewSession(p => ({
+        ...p,
+        desc: v
+      })),
+      placeholder: "f.eks. 5\xD75 min terskel"
+    }), /*#__PURE__*/React.createElement(Sel, {
+      label: "Intensitet",
+      value: newSession.intensity,
+      onChange: v => setNewSession(p => ({
+        ...p,
+        intensity: v
+      })),
+      options: [{
+        value: "hard",
+        label: "Hard 🔴"
+      }, {
+        value: "medium",
+        label: "Medium 🟡"
+      }, {
+        value: "easy",
+        label: "Lett 🟢"
+      }, {
+        value: "rest",
+        label: "Hvile ⚪"
+      }]
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement(Btn, {
+      onClick: addSession,
+      small: true,
+      color: C.green
+    }, "Legg til"), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setShowAddForm(false),
+      small: true,
+      color: C.muted
+    }, "Avbryt"))) : /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setShowAddForm(true),
+      small: true,
+      color: C.accent,
+      style: {
+        marginBottom: 12
+      }
+    }, "+ Legg til \xF8kt"), /*#__PURE__*/React.createElement(Btn, {
+      onClick: saveDate,
+      color: C.accent,
+      style: {
+        width: "100%"
+      }
+    }, "Lagre")));
+  }
   if (viewMode === "list") {
-    const dates = Array.from({length:60},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return dateStr(d.getFullYear(),d.getMonth(),d.getDate()); });
-    return (
-      <div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <h3 style={{ color:C.text, fontWeight:800 }}>Treningsplan</h3>
-          <div style={{ display:"flex", gap:6 }}>
-            <Btn onClick={()=>setViewMode("calendar")} small color={C.accent} outline>📅 Kalender</Btn>
-            <Btn onClick={()=>setViewMode("list")} small color={C.accent}>☰ Liste</Btn>
-          </div>
-        </div>
-        {dates.map(date=>{
-          const dow=dayOfWeek(date);
-          const plans=getSessionsForDate(date);
-          const done=getDoneSessionsForDate(date);
-          const isToday=date===today;
-          if (plans.length===0&&done.length===0&&!isToday) return null;
-          return (
-            <Card key={date} style={{ marginBottom:8, borderLeft:`3px solid ${isToday?C.accent:C.border}` }} onClick={()=>openDate(date)}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ display:"flex", gap:6, alignItems:"center", marginBottom:4 }}>
-                    <span style={{ fontSize:12, fontWeight:700, color:isToday?C.accent:C.muted }}>{DAYS[dow]} {formatDate(date)}</span>
-                    {isToday&&<Badge label="I DAG" color={C.accent}/>}
-                  </div>
-                  {plans.map((p,i)=>(
-                    <div key={i} style={{ fontSize:13, fontWeight:600, color:intensityColor(p.intensity), marginBottom:2 }}>{p.label}</div>
-                  ))}
-                  {done.map((s,i)=>(
-                    <div key={i} style={{ fontSize:12, color:C.green }}>✓ {typeLabel(s.type)} {s.km?`· ${s.km}km`:""}</div>
-                  ))}
-                </div>
-                <span style={{ color:C.muted, fontSize:18 }}>›</span>
-              </div>
-            </Card>
-          );
-        })}
-        {selectedDate && renderEditModal()}
-      </div>
-    );
+    const dates = Array.from({
+      length: 90
+    }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() + i);
+      return dateStr(d.getFullYear(), d.getMonth(), d.getDate());
+    });
+    return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("h3", {
+      style: {
+        color: C.text,
+        fontWeight: 800
+      }
+    }, "Treningsplan"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 6
+      }
+    }, /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setViewMode("calendar"),
+      small: true,
+      color: C.accent,
+      outline: true
+    }, "\uD83D\uDCC5"), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setViewMode("list"),
+      small: true,
+      color: C.accent
+    }, "\u2630"))), dates.map(date => {
+      const plans = getPlans(date),
+        done = getDone(date),
+        isToday = date === today;
+      if (!isToday && plans.length === 0 && done.length === 0) return null;
+      return /*#__PURE__*/React.createElement(Card, {
+        key: date,
+        style: {
+          marginBottom: 8,
+          borderLeft: `3px solid ${isToday ? C.accent : C.border}`
+        },
+        onClick: () => openDate(date)
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
+          marginBottom: 4
+        }
+      }, /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 12,
+          fontWeight: 700,
+          color: isToday ? C.accent : C.muted
+        }
+      }, DAYS[dayOfWeek(date)], " ", formatDate(date)), isToday && /*#__PURE__*/React.createElement(Badge, {
+        label: "I DAG",
+        color: C.accent
+      })), plans.map((p, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          fontSize: 13,
+          fontWeight: 600,
+          color: intensityColor(p.intensity),
+          marginBottom: 2
+        }
+      }, p.label, /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted,
+          fontWeight: 400,
+          fontSize: 12
+        }
+      }, " \xB7 ", p.desc))), done.map((s, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          fontSize: 12,
+          color: C.green
+        }
+      }, "\u2713 ", typeLabel(s.type), s.km ? ` · ${s.km}km` : ""))), /*#__PURE__*/React.createElement("span", {
+        style: {
+          color: C.muted,
+          fontSize: 18
+        }
+      }, "\u203A")));
+    }), selectedDate && /*#__PURE__*/React.createElement(EditModal, null));
   }
-
-  // CALENDAR VIEW
-  function renderEditModal() {
-    return (
-      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-        <div style={{ background:C.surface, borderRadius:"20px 20px 0 0", padding:20, width:"100%", maxWidth:520, maxHeight:"80vh", overflowY:"auto" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-            <div>
-              <div style={{ fontWeight:800, fontSize:16, color:C.text }}>{DAYS[dayOfWeek(selectedDate)]}</div>
-              <div style={{ fontSize:13, color:C.muted }}>{formatDate(selectedDate)}</div>
-            </div>
-            <Btn onClick={()=>setSelectedDate(null)} small color={C.muted}>✕</Btn>
-          </div>
-
-          {/* Done sessions */}
-          {getDoneSessionsForDate(selectedDate).length>0&&(
-            <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, color:C.green, fontWeight:700, marginBottom:6 }}>GJENNOMFØRT</div>
-              {getDoneSessionsForDate(selectedDate).map((s,i)=>(
-                <div key={i} style={{ background:C.greenLight, borderRadius:8, padding:"6px 10px", marginBottom:4, fontSize:13, color:C.green, fontWeight:600 }}>
-                  ✓ {typeLabel(s.type)} {s.km?`· ${s.km}km`:""} {s.avgPace?`· ${s.avgPace}/km`:""}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Planned sessions */}
-          <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:6 }}>PLANLAGTE ØKTER</div>
-          {editingSessions.length===0&&<div style={{ color:C.muted, fontSize:13, marginBottom:8 }}>Ingen økt planlagt</div>}
-          {editingSessions.map((s,i)=>(
-            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:C.bg, borderRadius:8, padding:"8px 10px", marginBottom:6 }}>
-              <div>
-                <div style={{ fontWeight:700, color:intensityColor(s.intensity), fontSize:13 }}>{s.label}</div>
-                <div style={{ fontSize:12, color:C.muted }}>{s.desc}</div>
-              </div>
-              <Btn onClick={()=>removeSession(i)} small color={C.red}>✕</Btn>
-            </div>
-          ))}
-
-          {showAddForm?(
-            <div style={{ background:C.bg, borderRadius:12, padding:12, marginBottom:12 }}>
-              <Select label="Type" value={newSession.type} onChange={v=>setNewSession(p=>({...p,type:v,label:typeLabel(v)}))}
-                options={[{value:"intervals",label:"🏃 Intervaller"},{value:"easy",label:"🌿 Rolig jogging"},{value:"long",label:"🏔️ Langtur"},{value:"bike",label:"🚴 Sykkel"},{value:"strength",label:"💪 Styrke"},{value:"rest",label:"😴 Hvile"}]} />
-              <Input label="Navn (valgfritt)" value={newSession.label} onChange={v=>setNewSession(p=>({...p,label:v}))} placeholder={typeLabel(newSession.type)} />
-              <Input label="Beskrivelse" value={newSession.desc} onChange={v=>setNewSession(p=>({...p,desc:v}))} placeholder="f.eks. 5x6 min terskel" />
-              <Select label="Intensitet" value={newSession.intensity} onChange={v=>setNewSession(p=>({...p,intensity:v}))}
-                options={[{value:"hard",label:"Hard 🔴"},{value:"medium",label:"Medium 🟡"},{value:"easy",label:"Lett 🟢"},{value:"rest",label:"Hvile ⚪"}]} />
-              <div style={{ display:"flex", gap:8 }}>
-                <Btn onClick={addSession} small color={C.green}>Legg til</Btn>
-                <Btn onClick={()=>setShowAddForm(false)} small color={C.muted}>Avbryt</Btn>
-              </div>
-            </div>
-          ):(
-            <Btn onClick={()=>setShowAddForm(true)} small color={C.accent} style={{ marginBottom:12 }}>+ Legg til økt</Btn>
-          )}
-
-          <Btn onClick={saveDate} color={C.accent} style={{ width:"100%" }}>Lagre</Btn>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <h3 style={{ color:C.text, fontWeight:800 }}>Treningsplan</h3>
-        <div style={{ display:"flex", gap:6 }}>
-          <Btn onClick={()=>setViewMode("calendar")} small color={C.accent}>📅 Kalender</Btn>
-          <Btn onClick={()=>setViewMode("list")} small color={C.accent} outline>☰ Liste</Btn>
-        </div>
-      </div>
-
-      {/* Month navigation */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-        <Btn onClick={prevMonth} small color={C.muted}>‹</Btn>
-        <div style={{ fontWeight:700, fontSize:16, color:C.text }}>{MONTHS[month]} {year}</div>
-        <Btn onClick={nextMonth} small color={C.muted}>›</Btn>
-      </div>
-
-      {/* Weekday headers */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
-        {DAYS_SHORT.map(d=>(
-          <div key={d} style={{ textAlign:"center", fontSize:11, color:C.muted, fontWeight:700, padding:"4px 0" }}>{d}</div>
-        ))}
-      </div>
-
-      {/* Calendar grid */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
-        {Array.from({length:firstDay}).map((_,i)=><div key={`e${i}`}/>)}
-        {Array.from({length:daysInMonth},(_,i)=>{
-          const day=i+1;
-          const date=dateStr(year,month,day);
-          const plans=getSessionsForDate(date);
-          const done=getDoneSessionsForDate(date);
-          const isToday=date===today;
-          const isPast=date<today;
-          return (
-            <div key={day} onClick={()=>openDate(date)} style={{
-              minHeight:56, borderRadius:10, padding:"4px 5px", cursor:"pointer",
-              background:isToday?C.accent+"18":C.surface,
-              border:`1.5px solid ${isToday?C.accent:C.border}`,
-              transition:"all .1s"
-            }}
-              onMouseEnter={e=>e.currentTarget.style.background=isToday?C.accent+"28":"#f8fafc"}
-              onMouseLeave={e=>e.currentTarget.style.background=isToday?C.accent+"18":C.surface}
-            >
-              <div style={{ fontSize:12, fontWeight:isToday?800:500, color:isToday?C.accent:isPast?C.muted:C.text, marginBottom:2 }}>{day}</div>
-              {plans.slice(0,2).map((p,i)=>(
-                <div key={i} style={{ fontSize:9, borderRadius:3, padding:"1px 3px", marginBottom:1, background:intensityColor(p.intensity)+"22", color:intensityColor(p.intensity), fontWeight:700, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
-                  {p.label.replace(/[^\x00-\x7F]/g,"")||p.type}
-                </div>
-              ))}
-              {done.length>0&&<div style={{ fontSize:9, color:C.green, fontWeight:700 }}>✓×{done.length}</div>}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div style={{ display:"flex", gap:12, marginTop:12, flexWrap:"wrap" }}>
-        {[{color:C.red,label:"Hard"},{color:C.yellow,label:"Medium"},{color:C.green,label:"Lett/Gjennomført"}].map(({color,label})=>(
-          <div key={label} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:C.muted }}>
-            <div style={{ width:10, height:10, borderRadius:2, background:color+"44", border:`1px solid ${color}` }}/>
-            {label}
-          </div>
-        ))}
-      </div>
-
-      {selectedDate && renderEditModal()}
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.text,
+      fontWeight: 800
+    }
+  }, "Treningsplan"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setViewMode("calendar"),
+    small: true,
+    color: C.accent
+  }, "\uD83D\uDCC5"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setViewMode("list"),
+    small: true,
+    color: C.accent,
+    outline: true
+  }, "\u2630"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: prevMonth,
+    small: true,
+    color: C.muted
+  }, "\u2039"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 15,
+      color: C.text
+    }
+  }, MONTHS[month], " ", year), /*#__PURE__*/React.createElement(Btn, {
+    onClick: nextMonth,
+    small: true,
+    color: C.muted
+  }, "\u203A")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(7,1fr)",
+      gap: 2,
+      marginBottom: 4
+    }
+  }, DAYS_SHORT.map(d => /*#__PURE__*/React.createElement("div", {
+    key: d,
+    style: {
+      textAlign: "center",
+      fontSize: 10,
+      color: C.muted,
+      fontWeight: 700,
+      padding: "3px 0"
+    }
+  }, d))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(7,1fr)",
+      gap: 2
+    }
+  }, Array.from({
+    length: firstDay
+  }).map((_, i) => /*#__PURE__*/React.createElement("div", {
+    key: `e${i}`
+  })), Array.from({
+    length: daysInMonth
+  }, (_, i) => {
+    const day = i + 1,
+      date = dateStr(year, month, day);
+    const plans = getPlans(date),
+      done = getDone(date),
+      isToday = date === today,
+      isPast = date < today;
+    return /*#__PURE__*/React.createElement("div", {
+      key: day,
+      onClick: () => openDate(date),
+      style: {
+        minHeight: 52,
+        borderRadius: 10,
+        padding: "4px 4px",
+        cursor: "pointer",
+        background: isToday ? C.accent + "18" : C.surface,
+        border: `1.5px solid ${isToday ? C.accent : C.border}`,
+        transition: "all .1s"
+      },
+      onMouseEnter: e => e.currentTarget.style.background = isToday ? C.accent + "28" : "#f8fafc",
+      onMouseLeave: e => e.currentTarget.style.background = isToday ? C.accent + "18" : C.surface
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        fontWeight: isToday ? 800 : 500,
+        color: isToday ? C.accent : isPast ? C.muted : C.text,
+        marginBottom: 2
+      }
+    }, day), plans.slice(0, 2).map((p, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        fontSize: 8,
+        borderRadius: 3,
+        padding: "1px 2px",
+        marginBottom: 1,
+        background: intensityColor(p.intensity) + "22",
+        color: intensityColor(p.intensity),
+        fontWeight: 700,
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        textOverflow: "ellipsis"
+      }
+    }, p.label.replace(/[\u{1F000}-\u{1FFFF}]/gu, "").trim() || p.type)), done.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 8,
+        color: C.green,
+        fontWeight: 700
+      }
+    }, "\u2713", done.length));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 10,
+      marginTop: 10,
+      flexWrap: "wrap"
+    }
+  }, [{
+    color: C.red,
+    label: "Hard"
+  }, {
+    color: C.yellow,
+    label: "Medium"
+  }, {
+    color: C.green,
+    label: "Lett/Gjennomf."
+  }].map(({
+    color,
+    label
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: label,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 4,
+      fontSize: 11,
+      color: C.muted
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 10,
+      height: 10,
+      borderRadius: 2,
+      background: color + "44",
+      border: `1px solid ${color}`
+    }
+  }), label))), selectedDate && /*#__PURE__*/React.createElement(EditModal, null));
 }
 
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
-function LogTab({ sessions, setSessions }) {
-  const today=todayStr();
-  const [form,setForm]=useState({ date:today, type:"easy", km:"", totalTime:"", avgPace:"", avgHr:"", maxHr:"", temp:"", humidity:"", notes:"", rpe:"5", intervals:[{dist:"",pace:"",hr:""}] });
-  const [saved,setSaved]=useState(false);
-
-  function addInterval(){ setForm(p=>({...p,intervals:[...p.intervals,{dist:"",pace:"",hr:""}]})); }
-  function removeInterval(i){ setForm(p=>({...p,intervals:p.intervals.filter((_,idx)=>idx!==i)})); }
-  function updateInterval(i,field,val){ setForm(p=>{ const a=[...p.intervals]; a[i]={...a[i],[field]:val}; return {...p,intervals:a}; }); }
-
+function LogTab({
+  sessions,
+  setSessions,
+  userId
+}) {
+  const today = todayStr();
+  const [form, setForm] = React.useState({
+    date: today,
+    type: "easy",
+    km: "",
+    totalTime: "",
+    avgPace: "",
+    avgHr: "",
+    maxHr: "",
+    temp: "",
+    humidity: "",
+    notes: "",
+    rpe: "5",
+    intervals: [{
+      dist: "",
+      pace: "",
+      hr: ""
+    }]
+  });
+  const [saved, setSaved] = React.useState(false);
+  const [editId, setEditId] = React.useState(null);
   function save() {
-    if (!form.date||!form.type) return;
-    setSessions(prev=>[...prev.filter(s=>!(s.date===form.date&&s.id===form.id)),{...form,id:Date.now()}].sort((a,b)=>b.date.localeCompare(a.date)));
+    if (!form.date || !form.type) return;
+    setSessions(prev => [...prev.filter(s => s.id !== form.id), {
+      ...form,
+      id: form.id || Date.now()
+    }].sort((a, b) => b.date.localeCompare(a.date)), userId);
     setSaved(true);
-    setForm({ date:today, type:"easy", km:"", totalTime:"", avgPace:"", avgHr:"", maxHr:"", temp:"", humidity:"", notes:"", rpe:"5", intervals:[{dist:"",pace:"",hr:""}] });
-    setTimeout(()=>setSaved(false),2000);
+    setEditId(null);
+    setForm({
+      date: today,
+      type: "easy",
+      km: "",
+      totalTime: "",
+      avgPace: "",
+      avgHr: "",
+      maxHr: "",
+      temp: "",
+      humidity: "",
+      notes: "",
+      rpe: "5",
+      intervals: [{
+        dist: "",
+        pace: "",
+        hr: ""
+      }]
+    });
+    setTimeout(() => setSaved(false), 2000);
   }
-
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>Loggfør økt</h3>
-      <Card>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
-          <Select label="Type" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))}
-            options={[{value:"intervals",label:"🏃 Intervaller"},{value:"easy",label:"🌿 Rolig"},{value:"long",label:"🏔️ Langtur"},{value:"bike",label:"🚴 Sykkel"},{value:"strength",label:"💪 Styrke"},{value:"rest",label:"😴 Hvile"}]} />
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-          <Input label="Distanse (km)" type="number" step="0.1" value={form.km} onChange={v=>setForm(p=>({...p,km:v}))} />
-          <Input label="Tid (min)" type="number" value={form.totalTime} onChange={v=>setForm(p=>({...p,totalTime:v}))} />
-          <Input label="Tempo (min/km)" value={form.avgPace} onChange={v=>setForm(p=>({...p,avgPace:v}))} placeholder="4:30" />
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
-          <Input label="Snittpuls" type="number" value={form.avgHr} onChange={v=>setForm(p=>({...p,avgHr:v}))} />
-          <Input label="Makspuls" type="number" value={form.maxHr} onChange={v=>setForm(p=>({...p,maxHr:v}))} />
-          <Input label="Temp °C" type="number" value={form.temp} onChange={v=>setForm(p=>({...p,temp:v}))} />
-          <Input label="Fukt %" type="number" value={form.humidity} onChange={v=>setForm(p=>({...p,humidity:v}))} />
-        </div>
-        <div style={{ marginBottom:12 }}>
-          <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:6 }}>RPE (1–10)</div>
-          <div style={{ display:"flex", gap:3 }}>
-            {[1,2,3,4,5,6,7,8,9,10].map(n=>(
-              <div key={n} onClick={()=>setForm(p=>({...p,rpe:String(n)}))} style={{
-                flex:1, height:30, borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:11, fontWeight:700, transition:"all .1s",
-                background:form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red)+"33":C.bg,
-                border:`1.5px solid ${form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red):C.border}`,
-                color:form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red):C.muted
-              }}>{n}</div>
-            ))}
-          </div>
-        </div>
-        {form.type==="intervals"&&(
-          <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>DRAG</div>
-            {form.intervals.map((iv,i)=>(
-              <div key={i} style={{ display:"flex", gap:6, marginBottom:6, alignItems:"flex-end" }}>
-                <Input label={i===0?"Dist (km)":""} value={iv.dist} onChange={v=>updateInterval(i,"dist",v)} placeholder="km" style={{ marginBottom:0 }} />
-                <Input label={i===0?"Tempo":""}  value={iv.pace} onChange={v=>updateInterval(i,"pace",v)} placeholder="4:30" style={{ marginBottom:0 }} />
-                <Input label={i===0?"Puls":""} value={iv.hr} onChange={v=>updateInterval(i,"hr",v)} placeholder="bpm" style={{ marginBottom:0 }} />
-                {form.intervals.length>1&&<Btn onClick={()=>removeInterval(i)} small color={C.red} style={{ marginBottom:0 }}>✕</Btn>}
-              </div>
-            ))}
-            <Btn onClick={addInterval} small color={C.accent}>+ Drag</Btn>
-          </div>
-        )}
-        <Textarea label="Notater" value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} rows={3} placeholder="Hvordan føltes det? Teknikk, vær, form..." />
-        <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre økt"}</Btn>
-      </Card>
-
-      {/* Recent sessions */}
-      {sessions.length>0&&(
-        <div style={{ marginTop:20 }}>
-          <div style={{ fontSize:12, color:C.muted, fontWeight:700, marginBottom:10 }}>SISTE ØKTER</div>
-          {sessions.slice(0,5).map(s=>(
-            <Card key={s.id} style={{ marginBottom:8 }}>
-              <div style={{ display:"flex", justifyContent:"space-between" }}>
-                <div>
-                  <div style={{ fontWeight:700, fontSize:13 }}>{typeLabel(s.type)}</div>
-                  <div style={{ fontSize:12, color:C.muted }}>{formatDate(s.date)}</div>
-                </div>
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ color:C.accent, fontWeight:700 }}>{s.km?`${s.km}km`:"–"}</div>
-                  <div style={{ fontSize:12, color:C.muted }}>{s.avgPace?`${s.avgPace}/km`:""}</div>
-                </div>
-              </div>
-            </Card>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  function editSession(s) {
+    setForm({
+      ...s,
+      intervals: s.intervals?.length ? s.intervals : [{
+        dist: "",
+        pace: "",
+        hr: ""
+      }]
+    });
+    setEditId(s.id);
+    window.scrollTo(0, 0);
+  }
+  function deleteSession(id) {
+    setSessions(prev => prev.filter(s => s.id !== id), userId);
+  }
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.text,
+      fontWeight: 800,
+      marginBottom: 16
+    }
+  }, editId ? "Rediger økt" : "Loggfør økt"), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Dato",
+    type: "date",
+    value: form.date,
+    onChange: v => setForm(p => ({
+      ...p,
+      date: v
+    }))
+  }), /*#__PURE__*/React.createElement(Sel, {
+    label: "Type",
+    value: form.type,
+    onChange: v => setForm(p => ({
+      ...p,
+      type: v
+    })),
+    options: SESSION_OPTS
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Km",
+    type: "number",
+    step: "0.1",
+    value: form.km,
+    onChange: v => setForm(p => ({
+      ...p,
+      km: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Tid (min)",
+    type: "number",
+    value: form.totalTime,
+    onChange: v => setForm(p => ({
+      ...p,
+      totalTime: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Tempo/km",
+    value: form.avgPace,
+    onChange: v => setForm(p => ({
+      ...p,
+      avgPace: v
+    })),
+    placeholder: "4:30"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Snittpuls",
+    type: "number",
+    value: form.avgHr,
+    onChange: v => setForm(p => ({
+      ...p,
+      avgHr: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Makspuls",
+    type: "number",
+    value: form.maxHr,
+    onChange: v => setForm(p => ({
+      ...p,
+      maxHr: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Temp \xB0C",
+    type: "number",
+    value: form.temp,
+    onChange: v => setForm(p => ({
+      ...p,
+      temp: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Fukt %",
+    type: "number",
+    value: form.humidity,
+    onChange: v => setForm(p => ({
+      ...p,
+      humidity: v
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 6
+    }
+  }, "RPE (1\u201310)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 3
+    }
+  }, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => /*#__PURE__*/React.createElement("div", {
+    key: n,
+    onClick: () => setForm(p => ({
+      ...p,
+      rpe: String(n)
+    })),
+    style: {
+      flex: 1,
+      height: 30,
+      borderRadius: 6,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 11,
+      fontWeight: 700,
+      transition: "all .1s",
+      background: form.rpe === String(n) ? (n <= 3 ? C.green : n <= 6 ? C.yellow : C.red) + "33" : C.bg,
+      border: `1.5px solid ${form.rpe === String(n) ? n <= 3 ? C.green : n <= 6 ? C.yellow : C.red : C.border}`,
+      color: form.rpe === String(n) ? n <= 3 ? C.green : n <= 6 ? C.yellow : C.red : C.muted
+    }
+  }, n)))), form.type === "intervals" && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "DRAG"), form.intervals.map((iv, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 6,
+      marginBottom: 6,
+      alignItems: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Dist" : "",
+    value: iv.dist,
+    onChange: v => {
+      const a = [...form.intervals];
+      a[i] = {
+        ...a[i],
+        dist: v
+      };
+      setForm(p => ({
+        ...p,
+        intervals: a
+      }));
+    },
+    placeholder: "km",
+    style: {
+      marginBottom: 0
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Tempo" : "",
+    value: iv.pace,
+    onChange: v => {
+      const a = [...form.intervals];
+      a[i] = {
+        ...a[i],
+        pace: v
+      };
+      setForm(p => ({
+        ...p,
+        intervals: a
+      }));
+    },
+    placeholder: "4:30",
+    style: {
+      marginBottom: 0
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Puls" : "",
+    value: iv.hr,
+    onChange: v => {
+      const a = [...form.intervals];
+      a[i] = {
+        ...a[i],
+        hr: v
+      };
+      setForm(p => ({
+        ...p,
+        intervals: a
+      }));
+    },
+    placeholder: "bpm",
+    style: {
+      marginBottom: 0
+    }
+  }), form.intervals.length > 1 && /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setForm(p => ({
+      ...p,
+      intervals: p.intervals.filter((_, idx) => idx !== i)
+    })),
+    small: true,
+    color: C.red,
+    style: {
+      marginBottom: 0
+    }
+  }, "\u2715"))), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setForm(p => ({
+      ...p,
+      intervals: [...p.intervals, {
+        dist: "",
+        pace: "",
+        hr: ""
+      }]
+    })),
+    small: true,
+    color: C.accent
+  }, "+ Drag")), /*#__PURE__*/React.createElement(Txta, {
+    label: "Notater",
+    value: form.notes,
+    onChange: v => setForm(p => ({
+      ...p,
+      notes: v
+    })),
+    rows: 3,
+    placeholder: "Hvordan f\xF8ltes det?"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: save,
+    color: C.green,
+    style: {
+      flex: 1
+    }
+  }, saved ? "✓ Lagret!" : editId ? "Oppdater" : "Lagre økt"), editId && /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => {
+      setEditId(null);
+      setForm({
+        date: today,
+        type: "easy",
+        km: "",
+        totalTime: "",
+        avgPace: "",
+        avgHr: "",
+        maxHr: "",
+        temp: "",
+        humidity: "",
+        notes: "",
+        rpe: "5",
+        intervals: [{
+          dist: "",
+          pace: "",
+          hr: ""
+        }]
+      });
+    },
+    small: true,
+    color: C.muted
+  }, "Avbryt"))), sessions.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "HISTORIKK"), sessions.map(s => /*#__PURE__*/React.createElement(Card, {
+    key: s.id,
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 700,
+      fontSize: 13
+    }
+  }, typeLabel(s.type)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted
+    }
+  }, formatDate(s.date), s.stravaId ? " · 📡" : ""), s.km && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.accent,
+      marginTop: 2
+    }
+  }, s.km, "km", s.avgPace ? ` · ${s.avgPace}/km` : "", s.avgHr ? ` · ${s.avgHr}bpm` : ""), s.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      marginTop: 2,
+      whiteSpace: "pre-wrap"
+    }
+  }, s.notes.slice(0, 80), s.notes.length > 80 ? "..." : "")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      flexShrink: 0
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => editSession(s),
+    small: true,
+    color: C.accent
+  }, "\u270E"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => {
+      if (window.confirm("Slette denne økten?")) deleteSession(s.id);
+    },
+    small: true,
+    color: C.red
+  }, "\u2715")))))));
 }
 
 // ─── STRENGTH TAB ─────────────────────────────────────────────────────────────
-const DEFAULT_EXERCISES=[
-  {id:"pullups",name:"Chins / Pull-ups",unit:"kg",icon:"🔝"},
-  {id:"squat",name:"Knebøy",unit:"kg",icon:"🏋️"},
-  {id:"deadlift",name:"Markløft",unit:"kg",icon:"⬆️"},
-  {id:"dips",name:"Dips",unit:"kg",icon:"💪"},
-];
-
-function StrengthTab({ strengthLog, setStrengthLog }) {
-  const [active,setActive]=useState("pullups");
-  const [view,setView]=useState("log");
-  const [form,setForm]=useState({ date:todayStr(), sets:[{reps:"",weight:""}], notes:"" });
-  const [saved,setSaved]=useState(false);
-  const [exercises,setExercises]=useStore("nm_exercises",DEFAULT_EXERCISES);
-  const [newEx,setNewEx]=useState({name:"",unit:"kg",icon:"🏋️"});
-  const [showNewEx,setShowNewEx]=useState(false);
-
-  const ex=exercises.find(e=>e.id===active)||exercises[0];
-  const exLog=(strengthLog[active]||[]).sort((a,b)=>b.date.localeCompare(a.date));
-
-  function oneRM(w,r){ if(!w||!r||r===1) return parseFloat(w)||0; return parseFloat(w)*(1+parseFloat(r)/30); }
-  function bestSet(s){ return s.sets?.reduce((b,x)=>oneRM(x.weight,x.reps)>oneRM(b.weight,b.reps)?x:b,s.sets[0]); }
-
-  const chartData=[...exLog].reverse().slice(-12).map(s=>{ const b=bestSet(s); return {date:s.date,orm:b?oneRM(b.weight,b.reps):0}; });
-  const maxOrm=chartData.reduce((m,d)=>Math.max(m,d.orm),0);
-  const latestOrm=chartData[chartData.length-1]?.orm||0;
-  const prevOrm=chartData[chartData.length-2]?.orm||0;
-
-  function save(){
-    if(!form.sets.some(s=>s.reps)) return;
-    setStrengthLog(prev=>({...prev,[active]:[...(prev[active]||[]),{...form,id:Date.now()}]}));
-    setSaved(true);
-    setForm({date:todayStr(),sets:[{reps:"",weight:""}],notes:""});
-    setTimeout(()=>setSaved(false),1200);
+const DEFAULT_EXERCISES = [{
+  id: "pullups",
+  name: "Chins / Pull-ups",
+  unit: "kg",
+  icon: "🔝"
+}, {
+  id: "squat",
+  name: "Knebøy",
+  unit: "kg",
+  icon: "🏋️"
+}, {
+  id: "deadlift",
+  name: "Markløft",
+  unit: "kg",
+  icon: "⬆️"
+}, {
+  id: "dips",
+  name: "Dips",
+  unit: "kg",
+  icon: "💪"
+}];
+function StrengthTab({
+  strengthLog,
+  setStrengthLog,
+  userId
+}) {
+  const [active, setActive] = React.useState("pullups");
+  const [view, setView] = React.useState("log");
+  const [form, setForm] = React.useState({
+    date: todayStr(),
+    sets: [{
+      reps: "",
+      weight: ""
+    }],
+    notes: ""
+  });
+  const [saved, setSaved] = React.useState(false);
+  const [exercises, setExercises] = useStore("nm_exercises", DEFAULT_EXERCISES);
+  const [newEx, setNewEx] = React.useState({
+    name: "",
+    unit: "kg",
+    icon: "🏋️"
+  });
+  const [showNewEx, setShowNewEx] = React.useState(false);
+  const ex = exercises.find(e => e.id === active) || exercises[0];
+  const exLog = (strengthLog[active] || []).sort((a, b) => b.date.localeCompare(a.date));
+  function orm(w, r) {
+    if (!w || !r || r === 1) return parseFloat(w) || 0;
+    return parseFloat(w) * (1 + parseFloat(r) / 30);
   }
-
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:12 }}>💪 Styrketrening</h3>
-      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:8, marginBottom:12 }}>
-        {exercises.map(e=>(
-          <div key={e.id} onClick={()=>{ setActive(e.id); setView("log"); }} style={{
-            flexShrink:0, padding:"6px 14px", borderRadius:20, cursor:"pointer",
-            background:active===e.id?C.accent+"18":C.surface,
-            border:`1.5px solid ${active===e.id?C.accent:C.border}`,
-            color:active===e.id?C.accent:C.muted, fontSize:13, fontWeight:active===e.id?700:400, whiteSpace:"nowrap"
-          }}>{e.icon} {e.name}</div>
-        ))}
-        <div onClick={()=>setShowNewEx(true)} style={{ flexShrink:0, padding:"6px 14px", borderRadius:20, cursor:"pointer", background:C.surface, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:13, whiteSpace:"nowrap" }}>+ Ny</div>
-      </div>
-
-      {showNewEx&&(
-        <Card style={{ marginBottom:12 }}>
-          <div style={{ fontSize:12, color:C.accent, fontWeight:700, marginBottom:8 }}>NY ØVELSE</div>
-          <Input label="Navn" value={newEx.name} onChange={v=>setNewEx(p=>({...p,name:v}))} />
-          <div style={{ display:"flex", gap:8 }}>
-            <Btn onClick={()=>{ const id=newEx.name.toLowerCase().replace(/\s+/g,"_"); setExercises(p=>[...p,{...newEx,id}]); setActive(id); setShowNewEx(false); setNewEx({name:"",unit:"kg",icon:"🏋️"}); }} small color={C.green}>Legg til</Btn>
-            <Btn onClick={()=>setShowNewEx(false)} small color={C.muted}>Avbryt</Btn>
-          </div>
-        </Card>
-      )}
-
-      {chartData.length>0&&(
-        <Card style={{ marginBottom:12 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:chartData.length>=2?12:0 }}>
-            <Stat label="Siste 1RM" value={latestOrm.toFixed(1)} unit="kg" />
-            <Stat label="All-time" value={maxOrm.toFixed(1)} unit="kg" color={C.yellow} />
-            <Stat label="Trend" value={(latestOrm-prevOrm>=0?"+":"")+(latestOrm-prevOrm).toFixed(1)} unit="kg" color={latestOrm>=prevOrm?C.green:C.red} />
-          </div>
-          {chartData.length>=2&&(
-            <div>
-              <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>1RM-UTVIKLING</div>
-              <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:50 }}>
-                {chartData.map((d,i)=>{ const pct=maxOrm>0?(d.orm/maxOrm)*100:0; const isLast=i===chartData.length-1;
-                  return <div key={i} style={{ flex:1, height:`${Math.max(pct,8)}%`, borderRadius:"3px 3px 0 0", background:isLast?C.accent:C.accent+"44", minHeight:4 }}/>;
-                })}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
-
-      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
-        <Btn onClick={()=>setView("log")} small color={view==="log"?C.accent:C.muted} outline={view!=="log"}>+ Loggfør</Btn>
-        <Btn onClick={()=>setView("history")} small color={view==="history"?C.accent:C.muted} outline={view!=="history"}>📖 Historikk</Btn>
-      </div>
-
-      {view==="log"&&(
-        <Card>
-          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
-          <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:8 }}>SETT</div>
-          {form.sets.map((s,i)=>(
-            <div key={i} style={{ display:"flex", gap:8, marginBottom:8, alignItems:"flex-end" }}>
-              <div style={{ width:24, height:24, borderRadius:"50%", background:C.accent+"22", color:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0, marginBottom:2 }}>{i+1}</div>
-              <Input label={i===0?"Vekt (kg)":""} type="number" step="0.5" value={s.weight} onChange={v=>{ const a=[...form.sets]; a[i]={...a[i],weight:v}; setForm(p=>({...p,sets:a})); }} placeholder="kg" style={{ marginBottom:0 }} />
-              <Input label={i===0?"Reps":""} type="number" value={s.reps} onChange={v=>{ const a=[...form.sets]; a[i]={...a[i],reps:v}; setForm(p=>({...p,sets:a})); }} placeholder="reps" style={{ marginBottom:0 }} />
-              {s.weight&&s.reps&&<div style={{ fontSize:11, color:C.muted, whiteSpace:"nowrap", paddingBottom:10 }}>~{oneRM(s.weight,s.reps).toFixed(1)}kg</div>}
-              {form.sets.length>1&&<Btn onClick={()=>setForm(p=>({...p,sets:p.sets.filter((_,idx)=>idx!==i)}))} small color={C.red} style={{ marginBottom:0 }}>✕</Btn>}
-            </div>
-          ))}
-          <Btn onClick={()=>setForm(p=>({...p,sets:[...p.sets,{reps:"",weight:""}]}))} small color={C.accent} style={{ marginBottom:12 }}>+ Sett</Btn>
-          <Textarea label="Notater" value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} rows={2} placeholder="Teknikk, dagsform..." />
-          <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre økt"}</Btn>
-        </Card>
-      )}
-
-      {view==="history"&&(
-        <div>
-          {exLog.length===0?<div style={{ color:C.muted, textAlign:"center", padding:30 }}>Ingen {ex?.name}-økter ennå</div>
-          :exLog.map(entry=>{ const best=bestSet(entry); return (
-            <Card key={entry.id} style={{ marginBottom:8 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
-                <div>
-                  <div style={{ fontSize:12, color:C.muted }}>{formatDate(entry.date)}</div>
-                  <div style={{ fontWeight:700 }}>{entry.sets.length} sett {best&&ex?.unit==="kg"?<span style={{ color:C.accent }}>· Beste: {best.weight}kg×{best.reps} (~{oneRM(best.weight,best.reps).toFixed(1)}kg)</span>:""}</div>
-                </div>
-                <Btn onClick={()=>setStrengthLog(prev=>({...prev,[active]:(prev[active]||[]).filter(e=>e.id!==entry.id)}))} small color={C.red}>Slett</Btn>
-              </div>
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
-                {entry.sets.map((s,i)=><div key={i} style={{ background:C.bg, borderRadius:6, padding:"3px 8px", fontSize:12, color:C.text }}>{s.weight?`${s.weight}kg × `:""}{s.reps} reps</div>)}
-              </div>
-              {entry.notes&&<div style={{ fontSize:12, color:C.muted, marginTop:6 }}>{entry.notes}</div>}
-            </Card>
-          );})}
-        </div>
-      )}
-    </div>
-  );
+  function bestSet(s) {
+    return s.sets?.reduce((b, x) => orm(x.weight, x.reps) > orm(b.weight, b.reps) ? x : b, s.sets[0]);
+  }
+  const chartData = [...exLog].reverse().slice(-12).map(s => {
+    const b = bestSet(s);
+    return {
+      date: s.date,
+      o: b ? orm(b.weight, b.reps) : 0
+    };
+  });
+  const maxO = chartData.reduce((m, d) => Math.max(m, d.o), 0);
+  const latestO = chartData[chartData.length - 1]?.o || 0;
+  const prevO = chartData[chartData.length - 2]?.o || 0;
+  function save() {
+    if (!form.sets.some(s => s.reps)) return;
+    setStrengthLog(prev => ({
+      ...prev,
+      [active]: [...(prev[active] || []), {
+        ...form,
+        id: Date.now()
+      }]
+    }), userId);
+    setSaved(true);
+    setForm({
+      date: todayStr(),
+      sets: [{
+        reps: "",
+        weight: ""
+      }],
+      notes: ""
+    });
+    setTimeout(() => setSaved(false), 1200);
+  }
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.text,
+      fontWeight: 800,
+      marginBottom: 12
+    }
+  }, "\uD83D\uDCAA Styrketrening"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      overflowX: "auto",
+      paddingBottom: 8,
+      marginBottom: 12
+    }
+  }, exercises.map(e => /*#__PURE__*/React.createElement("div", {
+    key: e.id,
+    onClick: () => {
+      setActive(e.id);
+      setView("log");
+    },
+    style: {
+      flexShrink: 0,
+      padding: "6px 14px",
+      borderRadius: 20,
+      cursor: "pointer",
+      background: active === e.id ? C.accent + "18" : C.surface,
+      border: `1.5px solid ${active === e.id ? C.accent : C.border}`,
+      color: active === e.id ? C.accent : C.muted,
+      fontSize: 13,
+      fontWeight: active === e.id ? 700 : 400,
+      whiteSpace: "nowrap"
+    }
+  }, e.icon, " ", e.name)), /*#__PURE__*/React.createElement("div", {
+    onClick: () => setShowNewEx(true),
+    style: {
+      flexShrink: 0,
+      padding: "6px 14px",
+      borderRadius: 20,
+      cursor: "pointer",
+      background: C.surface,
+      border: `1.5px dashed ${C.border}`,
+      color: C.muted,
+      fontSize: 13,
+      whiteSpace: "nowrap"
+    }
+  }, "+ Ny")), showNewEx && /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Navn p\xE5 \xF8velse",
+    value: newEx.name,
+    onChange: v => setNewEx(p => ({
+      ...p,
+      name: v
+    }))
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => {
+      const id = newEx.name.toLowerCase().replace(/\s+/g, "_");
+      setExercises(p => [...p, {
+        ...newEx,
+        id
+      }]);
+      setActive(id);
+      setShowNewEx(false);
+      setNewEx({
+        name: "",
+        unit: "kg",
+        icon: "🏋️"
+      });
+    },
+    small: true,
+    color: C.green
+  }, "Legg til"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setShowNewEx(false),
+    small: true,
+    color: C.muted
+  }, "Avbryt"))), chartData.length > 0 && /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 10,
+      marginBottom: chartData.length >= 2 ? 12 : 0
+    }
+  }, /*#__PURE__*/React.createElement(Stat, {
+    label: "Siste 1RM",
+    value: latestO.toFixed(1),
+    unit: "kg"
+  }), /*#__PURE__*/React.createElement(Stat, {
+    label: "All-time",
+    value: maxO.toFixed(1),
+    unit: "kg",
+    color: C.yellow
+  }), /*#__PURE__*/React.createElement(Stat, {
+    label: "Trend",
+    value: (latestO - prevO >= 0 ? "+" : "") + (latestO - prevO).toFixed(1),
+    unit: "kg",
+    color: latestO >= prevO ? C.green : C.red
+  })), chartData.length >= 2 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "flex-end",
+      gap: 3,
+      height: 48
+    }
+  }, chartData.map((d, i) => {
+    const pct = maxO > 0 ? d.o / maxO * 100 : 0;
+    const isLast = i === chartData.length - 1;
+    return /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        flex: 1,
+        height: `${Math.max(pct, 8)}%`,
+        borderRadius: "3px 3px 0 0",
+        background: isLast ? C.accent : C.accent + "55",
+        minHeight: 4
+      }
+    });
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setView("log"),
+    small: true,
+    color: view === "log" ? C.accent : C.muted,
+    outline: view !== "log"
+  }, "+ Loggf\xF8r"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setView("history"),
+    small: true,
+    color: view === "history" ? C.accent : C.muted,
+    outline: view !== "history"
+  }, "\uD83D\uDCD6 Historikk")), view === "log" && /*#__PURE__*/React.createElement(Card, null, /*#__PURE__*/React.createElement(Inp, {
+    label: "Dato",
+    type: "date",
+    value: form.date,
+    onChange: v => setForm(p => ({
+      ...p,
+      date: v
+    }))
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 8
+    }
+  }, "SETT"), form.sets.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 8,
+      alignItems: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 24,
+      height: 24,
+      borderRadius: "50%",
+      background: C.accent + "22",
+      color: C.accent,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 11,
+      fontWeight: 700,
+      flexShrink: 0,
+      marginBottom: 2
+    }
+  }, i + 1), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Vekt (kg)" : "",
+    type: "number",
+    step: "0.5",
+    value: s.weight,
+    onChange: v => {
+      const a = [...form.sets];
+      a[i] = {
+        ...a[i],
+        weight: v
+      };
+      setForm(p => ({
+        ...p,
+        sets: a
+      }));
+    },
+    placeholder: "kg",
+    style: {
+      marginBottom: 0
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Reps" : "",
+    type: "number",
+    value: s.reps,
+    onChange: v => {
+      const a = [...form.sets];
+      a[i] = {
+        ...a[i],
+        reps: v
+      };
+      setForm(p => ({
+        ...p,
+        sets: a
+      }));
+    },
+    placeholder: "reps",
+    style: {
+      marginBottom: 0
+    }
+  }), s.weight && s.reps && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      whiteSpace: "nowrap",
+      paddingBottom: 10
+    }
+  }, "~", orm(s.weight, s.reps).toFixed(1), "kg"), form.sets.length > 1 && /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setForm(p => ({
+      ...p,
+      sets: p.sets.filter((_, idx) => idx !== i)
+    })),
+    small: true,
+    color: C.red,
+    style: {
+      marginBottom: 0
+    }
+  }, "\u2715"))), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setForm(p => ({
+      ...p,
+      sets: [...p.sets, {
+        reps: "",
+        weight: ""
+      }]
+    })),
+    small: true,
+    color: C.accent,
+    style: {
+      marginBottom: 12
+    }
+  }, "+ Sett"), /*#__PURE__*/React.createElement(Txta, {
+    label: "Notater",
+    value: form.notes,
+    onChange: v => setForm(p => ({
+      ...p,
+      notes: v
+    })),
+    rows: 2,
+    placeholder: "Teknikk, dagsform..."
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: save,
+    color: C.green,
+    style: {
+      width: "100%"
+    }
+  }, saved ? "✓ Lagret!" : "Lagre økt")), view === "history" && /*#__PURE__*/React.createElement("div", null, exLog.length === 0 ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.muted,
+      textAlign: "center",
+      padding: 30
+    }
+  }, "Ingen ", ex?.name, "-\xF8kter enn\xE5") : exLog.map(entry => {
+    const best = bestSet(entry);
+    return /*#__PURE__*/React.createElement(Card, {
+      key: entry.id,
+      style: {
+        marginBottom: 8
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted
+      }
+    }, formatDate(entry.date)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontWeight: 700,
+        fontSize: 13
+      }
+    }, entry.sets.length, " sett", best && ex?.unit === "kg" ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.accent
+      }
+    }, " \xB7 ", best.weight, "kg\xD7", best.reps, " (~", orm(best.weight, best.reps).toFixed(1), "kg 1RM)") : "")), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setStrengthLog(prev => ({
+        ...prev,
+        [active]: (prev[active] || []).filter(e => e.id !== entry.id)
+      }), userId),
+      small: true,
+      color: C.red
+    }, "Slett")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: 4
+      }
+    }, entry.sets.map((s, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        background: C.bg,
+        borderRadius: 6,
+        padding: "3px 8px",
+        fontSize: 12
+      }
+    }, s.weight ? `${s.weight}kg × ` : "", s.reps, " reps"))), entry.notes && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 6
+      }
+    }, entry.notes));
+  })));
 }
 
 // ─── GOALS TAB ────────────────────────────────────────────────────────────────
-function GoalsTab({ goals, setGoals, sessions }) {
-  const [form,setForm]=useState({ name:"", date:"", distanceKm:"", targetTime:"", notes:"" });
-
+function GoalsTab({
+  goals,
+  setGoals,
+  sessions,
+  userId
+}) {
+  const [form, setForm] = React.useState({
+    name: "",
+    date: "",
+    distanceKm: "",
+    targetTime: "",
+    notes: ""
+  });
   function targetPace(goal) {
-    if (!goal.distanceKm||!goal.targetTime) return null;
-    const parts=goal.targetTime.split(":").map(Number);
-    const totalMin=parts.length===3?parts[0]*60+parts[1]+parts[2]/60:parts[0]+parts[1]/60;
-    const pace=totalMin/parseFloat(goal.distanceKm);
-    return `${Math.floor(pace)}:${String(Math.round((pace%1)*60)).padStart(2,"0")} min/km`;
+    if (!goal.distanceKm || !goal.targetTime) return null;
+    const parts = goal.targetTime.split(":").map(Number);
+    const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60 : parts[0] + parts[1] / 60;
+    const pace = totalMin / parseFloat(goal.distanceKm);
+    return `${Math.floor(pace)}:${String(Math.round(pace % 1 * 60)).padStart(2, "0")} min/km`;
   }
-
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>🎯 Treningsmål</h3>
-      <Card style={{ marginBottom:16, borderLeft:`4px solid ${C.accent}` }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>NYTT MÅL</div>
-        <Input label="Løp / arrangement" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="f.eks. Drammen halvmaraton" />
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
-          <Input label="Distanse (km)" type="number" value={form.distanceKm} onChange={v=>setForm(p=>({...p,distanceKm:v}))} placeholder="21.1" />
-        </div>
-        <Input label="Målid (t:mm:ss)" value={form.targetTime} onChange={v=>setForm(p=>({...p,targetTime:v}))} placeholder="1:45:00" />
-        <Btn onClick={()=>{ if(!form.name||!form.date) return; setGoals(prev=>[...prev,{...form,id:Date.now()}]); setForm({name:"",date:"",distanceKm:"",targetTime:"",notes:""}); }} color={C.green}>Legg til mål</Btn>
-      </Card>
-
-      {goals.length===0&&<div style={{ color:C.muted, textAlign:"center", padding:30 }}>Ingen mål satt ennå</div>}
-      {goals.map(goal=>{
-        const parts=analyzeGoalProgress({goal,sessions});
-        return (
-          <Card key={goal.id} style={{ marginBottom:12 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
-              <div>
-                <div style={{ fontSize:18, fontWeight:800 }}>{goal.name}</div>
-                <div style={{ color:C.muted, fontSize:13 }}>{formatDate(goal.date)} · {daysUntil(goal.date)} dager igjen</div>
-              </div>
-              <Btn onClick={()=>setGoals(prev=>prev.filter(g=>g.id!==goal.id))} small color={C.red}>Slett</Btn>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
-              <Stat label="Distanse" value={goal.distanceKm||"–"} unit="km" />
-              <Stat label="Målid" value={goal.targetTime||"–"} unit="" color={C.yellow} />
-              <Stat label="Mål-tempo" value={targetPace(goal)||"–"} unit="" color={C.green} />
-            </div>
-            <div style={{ background:C.bg, borderRadius:10, padding:12 }}>
-              <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>📊 FORMANALYSE</div>
-              {parts.map((p,i)=>{
-                const warn=p.startsWith("📉")||p.startsWith("⚠️")||p.startsWith("🚨");
-                const good=p.startsWith("✅")||p.startsWith("🚀");
-                return <div key={i} style={{ fontSize:13, color:warn?C.red:good?C.green:C.text, lineHeight:1.6, padding:"4px 0", borderBottom:i<parts.length-1?`1px solid ${C.border}`:"none" }}>{p}</div>;
-              })}
-            </div>
-          </Card>
-        );
-      })}
-    </div>
-  );
-}
-
-// ─── NUTRITION TAB ────────────────────────────────────────────────────────────
-function NutritionTab() {
-  const dow=dayOfWeek(todayStr());
-  const todayType=DEFAULT_WEEKLY[dow]?.[0]?.type||"easy";
-  const nut=NUTRITION[todayType]||NUTRITION.easy;
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:4 }}>🥗 Ernæring</h3>
-      <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>Tilpasset dagens økttype</div>
-      {[{title:"🌅 Før økt",content:nut.before},{title:"🏃 Under økt",content:nut.during},{title:"✅ Etter økt",content:nut.after},{title:"📅 Hele dagen",content:nut.general}].map(({title,content})=>(
-        <Card key={title} style={{ marginBottom:10 }}>
-          <div style={{ fontSize:12, color:C.accent, fontWeight:700, marginBottom:6 }}>{title}</div>
-          <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>{content}</div>
-        </Card>
-      ))}
-      <Card>
-        <div style={{ fontSize:12, color:C.yellow, fontWeight:700, marginBottom:8 }}>⚡ VIKTIGE NÆRINGSSTOFFER</div>
-        {[{name:"Jern",tip:"15mg/dag (kvinner). Rødt kjøtt, linser, spinat + C-vitamin. Unngå kaffe/te til jernrik mat."},{name:"B12",tip:"2.4μg/dag. Kjøtt, fisk, egg, meieri. Sjekk blodprøve årlig."},{name:"D-vitamin",tip:"1000–2000 IU/dag. Supplement anbefalt i Norge."},{name:"Magnesium",tip:"300–400mg/dag. Nøtter, mørk sjokolade. Reduserer kramper."},{name:"Karbo",tip:"Lett dag: 5–6g/kg. Hard dag: 7–10g/kg."},{name:"Protein",tip:"1.6–2.0g/kg/dag fordelt på 4–5 måltider á 20–30g."}].map(({name,tip})=>(
-          <div key={name} style={{ padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
-            <div style={{ fontWeight:700, color:C.text, fontSize:13 }}>{name}</div>
-            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{tip}</div>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
-// ─── RECOVERY TAB ─────────────────────────────────────────────────────────────
-function RecoveryTab({ sessions, morningData }) {
-  const last=sessions[0];
-  const rec=last?RECOVERY[last.type]||RECOVERY.easy:null;
-  const hvData=Object.entries(morningData).sort(([a],[b])=>a.localeCompare(b)).slice(-7);
-
-  function hrvTrend() {
-    const vals=hvData.map(([,m])=>parseFloat(m.hrv)).filter(Boolean);
-    if (vals.length<3) return null;
-    const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
-    const last=vals[vals.length-1];
-    const diff=((last-avg)/avg)*100;
-    return { diff, color:diff<-10?C.red:diff>10?C.green:C.yellow, label:diff<-10?"Nedadgående ⚠️":diff>10?"Stigende ✅":"Stabil" };
+  function analyzeGoal(goal) {
+    const lines = [];
+    const days = daysUntil(goal.date);
+    if (days < 0) return ["Dette løpet er passert."];
+    const last4 = sessions.filter(s => (new Date() - new Date(s.date + "T00:00:00")) / 86400000 <= 28);
+    const km = last4.reduce((a, s) => a + (parseFloat(s.km) || 0), 0) / 4;
+    const hard = last4.filter(s => s.type === "intervals").length;
+    const easy = last4.filter(s => ["easy", "bike", "strength"].includes(s.type)).length;
+    const ratio = hard + easy > 0 ? hard / (hard + easy) : 0;
+    const dist = parseFloat(goal.distanceKm) || 0;
+    const rec = dist < 10 ? 30 : dist < 21.1 ? 50 : dist < 42.2 ? 70 : 80;
+    lines.push(`📅 ${days} dager til ${goal.name}`);
+    if (km < rec * 0.6) lines.push(`📉 For lite volum: ${km.toFixed(0)}km/uke. Anbefalt ~${rec}km/uke.`);else if (km > rec * 1.3) lines.push(`📈 Høyt volum (${km.toFixed(0)}km/uke). Pass på skaderisiko.`);else lines.push(`✅ Godt volum: ${km.toFixed(0)}km/uke.`);
+    if (ratio > 0.35) lines.push(`⚠️ For mange harde økter (${Math.round(ratio * 100)}%). Maks 20%.`);else if (ratio > 0) lines.push(`✅ Intensitetsfordeling OK: ${Math.round(ratio * 100)}% harde.`);
+    if (days <= 14) lines.push("⬇️ TAPERING: –40% volum. 1 terskeløkt. Sov mye.");else if (days <= 21) lines.push("🔧 3 uker igjen: Siste tøffe blokk, deretter nedtrapping.");
+    if (!last4.length) return [`Loggfør økter for å analysere fremgangen mot ${goal.name}.`];
+    return lines;
   }
-  const trend=hrvTrend();
-
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>💤 Restitusjon</h3>
-      {last&&rec&&(
-        <Card style={{ marginBottom:12, borderLeft:`4px solid ${C.accent}` }}>
-          <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:8 }}>ETTER SISTE ØKT ({formatDate(last.date)})</div>
-          <div style={{ color:C.yellow, fontWeight:700, marginBottom:8 }}>⏱ {rec.hours}</div>
-          {rec.tips.map(tip=><div key={tip} style={{ fontSize:13, color:C.text, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>• {tip}</div>)}
-        </Card>
-      )}
-      {hvData.length>0&&(
-        <Card style={{ marginBottom:12 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
-            <div style={{ fontSize:11, color:C.muted, fontWeight:700 }}>MORGENDATA SISTE 7 DAGER</div>
-            {trend&&<Badge label={trend.label} color={trend.color}/>}
-          </div>
-          {hvData.map(([date,m])=>(
-            <div key={date} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
-              <span style={{ color:C.muted, minWidth:30 }}>{DAYS_SHORT[dayOfWeek(date)]}</span>
-              <span>{m.hr?`❤️ ${m.hr}`:""}</span>
-              <span style={{ color:C.green }}>{m.hrv?`HRV ${m.hrv}ms`:""}</span>
-              <span style={{ color:C.muted }}>{m.sleep?`😴 ${m.sleep}t`:""}</span>
-            </div>
-          ))}
-        </Card>
-      )}
-      <Card>
-        <div style={{ fontSize:12, color:C.yellow, fontWeight:700, marginBottom:8 }}>NORWEGIAN METHOD – PRINSIPPER</div>
-        {[{t:"80/20-regelen",d:"80% lett (sone 1–2), 20% hard. Overtrening er den vanligste feilen."},{t:"Dobbel terskel",d:"Maks 2 terskeløkter/uke. 36–48t mellom harde økter."},{t:"HRV-styrt",d:"HRV >10% under norm: lett dag. Over norm: grønt lys."},{t:"Søvn er trening",d:"8–9 timer optimalt. Søvnunderskudd nullstiller gevinst."},{t:"Aktiv restitusjon",d:"Lett sykkel/svømming akselererer restitusjon."}].map(({t,d})=>(
-          <div key={t} style={{ padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
-            <div style={{ fontWeight:700, fontSize:13 }}>{t}</div>
-            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{d}</div>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
-// ─── STRAVA TAB ───────────────────────────────────────────────────────────────
-function StravaTab({ sessions, setSessions }) {
-  const [stravaTokens,setStravaTokens]=useStore("nm_strava_tokens",null);
-  const [backendUrl,setBackendUrl]=useStore("nm_strava_backend","");
-  const [syncing,setSyncing]=useState(false);
-  const [syncResult,setSyncResult]=useState(null);
-  const [showManual,setShowManual]=useState(false);
-  const [manualToken,setManualToken]=useState("");
-
-  function connectStrava(){
-    const base=(backendUrl).replace(/\/$/,"");
-    if(!base){setSyncResult({type:"error",msg:"Legg inn Vercel-URL først."});return;}
-    window.open(`${base}/api/auth`,"_blank");
-    setShowManual(true);
-    setSyncResult({type:"info",msg:"🔗 Strava åpnet i nytt vindu. Logg inn, kopier URL-en du lander på, og lim inn under."});
-  }
-
-  function pasteCallbackUrl(){
-    try {
-      let params;
-      if(manualToken.includes("#")){ params=new URLSearchParams(manualToken.split("#")[1]); }
-      else { params=new URLSearchParams(new URL(manualToken).search); }
-      const tokens={ access_token:params.get("access_token"), refresh_token:params.get("refresh_token"), expires_at:parseInt(params.get("expires_at")), athlete_id:params.get("athlete_id") };
-      if(!tokens.access_token){setSyncResult({type:"error",msg:"❌ Fant ikke access_token i URL-en."});return;}
-      setStravaTokens(tokens); setShowManual(false); setManualToken("");
-      setSyncResult({type:"success",msg:"✅ Strava koblet til! Trykk 'Synkroniser'."});
-    } catch { setSyncResult({type:"error",msg:"❌ Ugyldig URL. Kopier hele URL-en fra adressefeltet."}); }
-  }
-
-  async function syncActivities(){
-    if(!stravaTokens?.access_token){setSyncResult({type:"error",msg:"Koble til Strava først."});return;}
-    const base=backendUrl.replace(/\/$/,"");
-    setSyncing(true); setSyncResult(null);
-    try {
-      const after=Math.floor(Date.now()/1000)-60*60*24*90;
-      const p=new URLSearchParams({ access_token:stravaTokens.access_token, refresh_token:stravaTokens.refresh_token, expires_at:stravaTokens.expires_at, after });
-      const res=await fetch(`${base}/api/activities?${p}`);
-      if(!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data=await res.json();
-      if(data.tokens) setStravaTokens(data.tokens);
-      const ids=new Set(data.sessions.map(s=>s.stravaId));
-      setSessions(prev=>[...prev.filter(s=>!s.stravaId||!ids.has(s.stravaId)),...data.sessions].sort((a,b)=>b.date.localeCompare(a.date)));
-      setSyncResult({type:"success",msg:`✅ Hentet ${data.sessions.length} aktiviteter.`});
-    } catch(err){ setSyncResult({type:"error",msg:`❌ Feil: ${err.message}`}); }
-    finally{ setSyncing(false); }
-  }
-
-  const isConnected=!!stravaTokens?.access_token;
-  return (
-    <div>
-      <h3 style={{ color:"#FC4C02", fontWeight:800, marginBottom:16 }}>🟠 Strava-synkronisering</h3>
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 1 – VERCEL URL</div>
-        <Input label="Din Vercel backend URL" value={backendUrl} onChange={setBackendUrl} placeholder="https://nm-strava-sync.vercel.app" />
-      </Card>
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 2 – KOBLE TIL</div>
-        {isConnected?(
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <Badge label="✓ TILKOBLET" color={C.green}/>
-            <Btn onClick={()=>setStravaTokens(null)} small color={C.red}>Koble fra</Btn>
-          </div>
-        ):(
-          <div>
-            <Btn onClick={connectStrava} color="#FC4C02" style={{ color:"#fff", marginBottom:showManual?12:0 }}>🟠 Åpne Strava-innlogging</Btn>
-            {showManual&&(
-              <div>
-                <div style={{ fontSize:12, color:C.yellow, marginBottom:6, marginTop:8 }}>Kopier hele URL-en etter innlogging og lim inn her:</div>
-                <Textarea value={manualToken} onChange={setManualToken} rows={2} placeholder="https://din-app.vercel.app/?strava_auth=1#access_token=..." />
-                <Btn onClick={pasteCallbackUrl} color={C.green} style={{ width:"100%" }}>✓ Bekreft</Btn>
-              </div>
-            )}
-          </div>
-        )}
-      </Card>
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 3 – SYNKRONISER</div>
-        <Btn onClick={syncActivities} color={isConnected?C.green:C.muted} style={{ width:"100%" }}>{syncing?"⏳ Synkroniserer...":"🔄 Synkroniser fra Strava"}</Btn>
-      </Card>
-      {syncResult&&<Card style={{ borderLeft:`4px solid ${syncResult.type==="error"?C.red:C.green}` }}><div style={{ fontSize:13, color:syncResult.type==="error"?C.red:C.green }}>{syncResult.msg}</div></Card>}
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.text,
+      fontWeight: 800,
+      marginBottom: 16
+    }
+  }, "\uD83C\uDFAF Treningsm\xE5l"), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 16,
+      borderLeft: `4px solid ${C.accent}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "NYTT M\xC5L"), /*#__PURE__*/React.createElement(Inp, {
+    label: "L\xF8p / arrangement",
+    value: form.name,
+    onChange: v => setForm(p => ({
+      ...p,
+      name: v
+    })),
+    placeholder: "f.eks. Drammen halvmaraton"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Dato",
+    type: "date",
+    value: form.date,
+    onChange: v => setForm(p => ({
+      ...p,
+      date: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Distanse (km)",
+    type: "number",
+    value: form.distanceKm,
+    onChange: v => setForm(p => ({
+      ...p,
+      distanceKm: v
+    })),
+    placeholder: "21.1"
+  })), /*#__PURE__*/React.createElement(Inp, {
+    label: "M\xE5lid (t:mm:ss)",
+    value: form.targetTime,
+    onChange: v => setForm(p => ({
+      ...p,
+      targetTime: v
+    })),
+    placeholder: "1:45:00"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => {
+      if (!form.name || !form.date) return;
+      setGoals(prev => [...prev, {
+        ...form,
+        id: Date.now()
+      }], userId);
+      setForm({
+        name: "",
+        date: "",
+        distanceKm: "",
+        targetTime: "",
+        notes: ""
+      });
+    },
+    color: C.green
+  }, "Legg til m\xE5l")), goals.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.muted,
+      textAlign: "center",
+      padding: 30
+    }
+  }, "Ingen m\xE5l satt enn\xE5"), goals.map(goal => {
+    const parts = analyzeGoal(goal);
+    return /*#__PURE__*/React.createElement(Card, {
+      key: goal.id,
+      style: {
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "flex-start",
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 18,
+        fontWeight: 800
+      }
+    }, goal.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        color: C.muted,
+        fontSize: 13
+      }
+    }, formatDate(goal.date), " \xB7 ", daysUntil(goal.date), " dager igjen")), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setGoals(prev => prev.filter(g => g.id !== goal.id), userId),
+      small: true,
+      color: C.red
+    }, "Slett")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr 1fr",
+        gap: 10,
+        marginBottom: 12
+      }
+    }, /*#__PURE__*/React.createElement(Stat, {
+      label: "Distanse",
+      value: goal.distanceKm || "–",
+      unit: "km"
+    }), /*#__PURE__*/React.createElement(Stat, {
+      label: "M\xE5lid",
+      value: goal.targetTime || "–",
+      unit: "",
+      color: C.yellow
+    }), /*#__PURE__*/React.createElement(Stat, {
+      label: "M\xE5l-tempo",
+      value: targetPace(goal) || "–",
+      unit: "",
+      color: C.green
+    })), /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.bg,
+        borderRadius: 10,
+        padding: 12
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.accent,
+        fontWeight: 700,
+        marginBottom: 8
+      }
+    }, "\uD83D\uDCCA FORMANALYSE"), parts.map((p, i) => {
+      const warn = p.startsWith("📉") || p.startsWith("⚠️") || p.startsWith("🚨");
+      const good = p.startsWith("✅") || p.startsWith("🚀");
+      return /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: {
+          fontSize: 13,
+          color: warn ? C.red : good ? C.green : C.text,
+          lineHeight: 1.6,
+          padding: "4px 0",
+          borderBottom: i < parts.length - 1 ? `1px solid ${C.border}` : "none"
+        }
+      }, p);
+    })));
+  }));
 }
 
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
-function ProfileTab({ profile, setProfile }) {
-  const [form,setForm]=useState(profile||{ name:"", normHr:"50", normHrv:"65", maxHr:"185", zone1:"", zone2:"", zone3:"", zone4:"", zone5:"", weightKg:"", birthYear:"" });
-  const [saved,setSaved]=useState(false);
-
-  function computeZones(){
-    const max=parseFloat(form.maxHr)||185;
-    setForm(p=>({
+function ProfileTab({
+  profile,
+  setProfile,
+  sessions,
+  setSessions,
+  userId
+}) {
+  const [form, setForm] = React.useState(profile || {
+    name: "",
+    normHr: "50",
+    normHrv: "65",
+    maxHr: "185",
+    zone1: "",
+    zone2: "",
+    zone3: "",
+    zone4: "",
+    zone5: "",
+    weightKg: "",
+    birthYear: ""
+  });
+  const [saved, setSaved] = React.useState(false);
+  const [stravaTokens, setStravaTokens] = useStore("nm_strava_tokens", null);
+  const [backendUrl, setBackendUrl] = useStore("nm_strava_backend", "");
+  const [syncing, setSyncing] = React.useState(false);
+  const [syncResult, setSyncResult] = React.useState(null);
+  const [showManual, setShowManual] = React.useState(false);
+  const [manualToken, setManualToken] = React.useState("");
+  const [supabaseUrl, setSupabaseUrl] = useStore("nm_supabase_url", "");
+  const [supabaseKey, setSupabaseKey] = useStore("nm_supabase_key", "");
+  const [syncUserId, setSyncUserId] = useStore("nm_user_id", "");
+  const [userIdInput, setUserIdInput] = React.useState(syncUserId);
+  function computeZones() {
+    const max = parseFloat(form.maxHr) || 185;
+    setForm(p => ({
       ...p,
-      zone1:`${Math.round(max*0.5)}–${Math.round(max*0.6)} bpm`,
-      zone2:`${Math.round(max*0.6)}–${Math.round(max*0.7)} bpm`,
-      zone3:`${Math.round(max*0.7)}–${Math.round(max*0.8)} bpm`,
-      zone4:`${Math.round(max*0.8)}–${Math.round(max*0.9)} bpm`,
-      zone5:`${Math.round(max*0.9)}–${max} bpm`,
+      zone1: `${Math.round(max * 0.5)}–${Math.round(max * 0.6)} bpm`,
+      zone2: `${Math.round(max * 0.6)}–${Math.round(max * 0.7)} bpm`,
+      zone3: `${Math.round(max * 0.7)}–${Math.round(max * 0.8)} bpm`,
+      zone4: `${Math.round(max * 0.8)}–${Math.round(max * 0.9)} bpm`,
+      zone5: `${Math.round(max * 0.9)}–${max} bpm`
     }));
   }
-
-  function save(){ setProfile(form); setSaved(true); setTimeout(()=>setSaved(false),1200); }
-
-  const zones=[
-    {z:"Sone 1 – Lett",pct:"50–60%",field:"zone1",color:C.green,desc:"Aktiv restitusjon, lett jogging"},
-    {z:"Sone 2 – Aerob",pct:"60–70%",field:"zone2",color:"#84cc16",desc:"Basis aerob, langkjøring"},
-    {z:"Sone 3 – Tempo",pct:"70–80%",field:"zone3",color:C.yellow,desc:"Moderat hard, halvmaraton-tempo"},
-    {z:"Sone 4 – Terskel",pct:"80–90%",field:"zone4",color:C.orange,desc:"Laktatterskelen, intervaller"},
-    {z:"Sone 5 – Maks",pct:"90–100%",field:"zone5",color:C.red,desc:"Maksimal intensitet, sprinter"},
-  ];
-
-  return (
-    <div>
-      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>👤 Profil & Pulssoner</h3>
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>PERSONLIG INFO</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-          <Input label="Navn" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="Ditt navn" />
-          <Input label="Fødselsår" type="number" value={form.birthYear} onChange={v=>setForm(p=>({...p,birthYear:v}))} placeholder="1990" />
-          <Input label="Vekt (kg)" type="number" value={form.weightKg} onChange={v=>setForm(p=>({...p,weightKg:v}))} placeholder="65" />
-        </div>
-      </Card>
-
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>NORMALE VERDIER</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-          <Input label="Normal hvilepuls (bpm)" type="number" value={form.normHr} onChange={v=>setForm(p=>({...p,normHr:v}))} placeholder="50" />
-          <Input label="Normal HRV (ms)" type="number" value={form.normHrv} onChange={v=>setForm(p=>({...p,normHrv:v}))} placeholder="65" />
-        </div>
-        <div style={{ fontSize:12, color:C.muted, background:C.bg, borderRadius:8, padding:10, marginTop:4 }}>
-          💡 Disse brukes av dashboardet for å vurdere om dagens verdier er over/under din personlige norm.
-        </div>
-      </Card>
-
-      <Card style={{ marginBottom:12 }}>
-        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>PULSSONER</div>
-        <div style={{ display:"flex", gap:8, alignItems:"flex-end", marginBottom:12 }}>
-          <Input label="Makspuls (bpm)" type="number" value={form.maxHr} onChange={v=>setForm(p=>({...p,maxHr:v}))} placeholder="185" style={{ marginBottom:0 }} />
-          <Btn onClick={computeZones} small color={C.accent} style={{ marginBottom:0 }}>Beregn soner</Btn>
-        </div>
-        {zones.map(({z,pct,field,color,desc})=>(
-          <div key={field} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
-            <div style={{ width:10, height:36, borderRadius:3, background:color, flexShrink:0 }}/>
-            <div style={{ flex:1 }}>
-              <div style={{ fontWeight:700, fontSize:13 }}>{z} <span style={{ color:C.muted, fontWeight:400 }}>({pct})</span></div>
-              <div style={{ fontSize:11, color:C.muted }}>{desc}</div>
-            </div>
-            <div style={{ fontWeight:700, color, fontSize:13, minWidth:90, textAlign:"right" }}>{form[field]||"–"}</div>
-          </div>
-        ))}
-        <div style={{ marginTop:12 }}>
-          <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>Eller juster manuelt:</div>
-          {zones.map(({z,field,color})=>(
-            <Input key={field} label={z} value={form[field]} onChange={v=>setForm(p=>({...p,[field]:v}))} placeholder="f.eks. 130–145 bpm" />
-          ))}
-        </div>
-      </Card>
-
-      <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre profil"}</Btn>
-    </div>
-  );
+  function saveProfile() {
+    setProfile(form, userId);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1200);
+  }
+  function connectStrava() {
+    const base = backendUrl.replace(/\/$/, "");
+    if (!base) {
+      setSyncResult({
+        type: "error",
+        msg: "Legg inn Vercel-URL først."
+      });
+      return;
+    }
+    window.open(`${base}/api/auth`, "_blank");
+    setShowManual(true);
+    setSyncResult({
+      type: "info",
+      msg: "🔗 Åpnet i nytt vindu. Kopier URL-en etter innlogging."
+    });
+  }
+  function pasteCallback() {
+    try {
+      let params;
+      if (manualToken.includes("#")) {
+        params = new URLSearchParams(manualToken.split("#")[1]);
+      } else {
+        params = new URLSearchParams(new URL(manualToken).search);
+      }
+      const tokens = {
+        access_token: params.get("access_token"),
+        refresh_token: params.get("refresh_token"),
+        expires_at: parseInt(params.get("expires_at"))
+      };
+      if (!tokens.access_token) {
+        setSyncResult({
+          type: "error",
+          msg: "❌ Fant ikke access_token."
+        });
+        return;
+      }
+      setStravaTokens(tokens);
+      setShowManual(false);
+      setManualToken("");
+      setSyncResult({
+        type: "success",
+        msg: "✅ Strava koblet til!"
+      });
+    } catch {
+      setSyncResult({
+        type: "error",
+        msg: "❌ Ugyldig URL."
+      });
+    }
+  }
+  async function syncStrava() {
+    if (!stravaTokens?.access_token) {
+      setSyncResult({
+        type: "error",
+        msg: "Koble til Strava først."
+      });
+      return;
+    }
+    const base = backendUrl.replace(/\/$/, "");
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const after = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 90;
+      const p = new URLSearchParams({
+        access_token: stravaTokens.access_token,
+        refresh_token: stravaTokens.refresh_token,
+        expires_at: stravaTokens.expires_at,
+        after
+      });
+      const res = await fetch(`${base}/api/activities?${p}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.tokens) setStravaTokens(data.tokens);
+      const ids = new Set(data.sessions.map(s => s.stravaId));
+      setSessions(prev => [...prev.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...data.sessions].sort((a, b) => b.date.localeCompare(a.date)), userId);
+      setSyncResult({
+        type: "success",
+        msg: `✅ Hentet ${data.sessions.length} aktiviteter.`
+      });
+    } catch (err) {
+      setSyncResult({
+        type: "error",
+        msg: `❌ ${err.message}`
+      });
+    } finally {
+      setSyncing(false);
+    }
+  }
+  const zones = [{
+    z: "Sone 1 – Lett",
+    f: "zone1",
+    c: C.green
+  }, {
+    z: "Sone 2 – Aerob",
+    f: "zone2",
+    c: "#84cc16"
+  }, {
+    z: "Sone 3 – Tempo",
+    f: "zone3",
+    c: C.yellow
+  }, {
+    z: "Sone 4 – Terskel",
+    f: "zone4",
+    c: C.orange
+  }, {
+    z: "Sone 5 – Maks",
+    f: "zone5",
+    c: C.red
+  }];
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: {
+      color: C.text,
+      fontWeight: 800,
+      marginBottom: 16
+    }
+  }, "\uD83D\uDC64 Profil"), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "PERSONLIG INFO"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Navn",
+    value: form.name,
+    onChange: v => setForm(p => ({
+      ...p,
+      name: v
+    })),
+    placeholder: "Ditt navn"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Vekt (kg)",
+    type: "number",
+    value: form.weightKg,
+    onChange: v => setForm(p => ({
+      ...p,
+      weightKg: v
+    })),
+    placeholder: "65"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Normal hvilepuls",
+    type: "number",
+    value: form.normHr,
+    onChange: v => setForm(p => ({
+      ...p,
+      normHr: v
+    })),
+    placeholder: "50"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Normal HRV (ms)",
+    type: "number",
+    value: form.normHrv,
+    onChange: v => setForm(p => ({
+      ...p,
+      normHrv: v
+    })),
+    placeholder: "65"
+  }))), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "PULSSONER"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      alignItems: "flex-end",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Makspuls (bpm)",
+    type: "number",
+    value: form.maxHr,
+    onChange: v => setForm(p => ({
+      ...p,
+      maxHr: v
+    })),
+    placeholder: "185",
+    style: {
+      marginBottom: 0
+    }
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: computeZones,
+    small: true,
+    color: C.accent,
+    style: {
+      marginBottom: 0
+    }
+  }, "Beregn")), zones.map(({
+    z,
+    f,
+    c
+  }) => /*#__PURE__*/React.createElement("div", {
+    key: f,
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "6px 0",
+      borderBottom: `1px solid ${C.border}`
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 8,
+      height: 32,
+      borderRadius: 3,
+      background: c,
+      flexShrink: 0
+    }
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: 600
+    }
+  }, z), /*#__PURE__*/React.createElement(Inp, {
+    label: "",
+    value: form[f],
+    onChange: v => setForm(p => ({
+      ...p,
+      [f]: v
+    })),
+    placeholder: "\u2013",
+    style: {
+      marginBottom: 0,
+      width: 130,
+      textAlign: "right"
+    }
+  })))), /*#__PURE__*/React.createElement(Btn, {
+    onClick: saveProfile,
+    color: C.green,
+    style: {
+      width: "100%",
+      marginBottom: 16
+    }
+  }, saved ? "✓ Lagret!" : "Lagre profil"), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "\u2601\uFE0F SKYSYNKRONISERING (Supabase)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      marginBottom: 10,
+      lineHeight: 1.5
+    }
+  }, "Synkroniser data mellom telefon og PC. Krever gratis Supabase-konto og oppsett (se guide under)."), /*#__PURE__*/React.createElement(Inp, {
+    label: "Supabase URL",
+    value: supabaseUrl,
+    onChange: v => {
+      setSupabaseUrl(v);
+      window.SUPABASE_URL = v;
+    },
+    placeholder: "https://xxx.supabase.co"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Supabase Anon Key",
+    value: supabaseKey,
+    onChange: v => {
+      setSupabaseKey(v);
+      window.SUPABASE_ANON_KEY = v;
+    },
+    placeholder: "eyJ..."
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Ditt bruker-ID (valgfritt navn/ID)",
+    value: userIdInput,
+    onChange: setUserIdInput,
+    placeholder: "f.eks. stine123"
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setSyncUserId(userIdInput),
+    small: true,
+    color: C.accent,
+    style: {
+      marginBottom: 8
+    }
+  }, "Sett bruker-ID"), syncUserId && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.green,
+      marginTop: 4
+    }
+  }, "\u2713 Synkronisering aktiv som: ", /*#__PURE__*/React.createElement("b", null, syncUserId)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 12,
+      fontSize: 11,
+      color: C.muted
+    }
+  }, /*#__PURE__*/React.createElement("b", null, "Oppsett (\xE9n gang):"), /*#__PURE__*/React.createElement("br", null), "1. G\xE5 til supabase.com \u2192 Nytt prosjekt", /*#__PURE__*/React.createElement("br", null), "2. SQL Editor \u2192 Kj\xF8r: ", /*#__PURE__*/React.createElement("code", {
+    style: {
+      background: C.bg,
+      padding: "2px 4px",
+      borderRadius: 4
+    }
+  }, "CREATE TABLE training_data (user_id text, key text, value text, updated_at timestamptz, PRIMARY KEY (user_id, key));"), /*#__PURE__*/React.createElement("br", null), "3. Settings \u2192 API \u2192 kopier URL og anon key hit", /*#__PURE__*/React.createElement("br", null), "4. Sett samme bruker-ID p\xE5 alle enheter")), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#FC4C02",
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "\uD83D\uDFE0 STRAVA-SYNKRONISERING"), /*#__PURE__*/React.createElement(Inp, {
+    label: "Vercel backend URL",
+    value: backendUrl,
+    onChange: setBackendUrl,
+    placeholder: "https://nm-strava-sync.vercel.app"
+  }), stravaTokens?.access_token ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement(Badge, {
+    label: "\u2713 TILKOBLET",
+    color: C.green
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setStravaTokens(null),
+    small: true,
+    color: C.red
+  }, "Koble fra")) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Btn, {
+    onClick: connectStrava,
+    color: "#FC4C02",
+    style: {
+      color: "#fff",
+      marginBottom: showManual ? 10 : 0
+    }
+  }, "\uD83D\uDFE0 Koble til Strava"), showManual && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement(Txta, {
+    value: manualToken,
+    onChange: setManualToken,
+    rows: 2,
+    placeholder: "Lim inn URL her etter Strava-innlogging..."
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: pasteCallback,
+    color: C.green,
+    style: {
+      width: "100%"
+    }
+  }, "\u2713 Bekreft"))), /*#__PURE__*/React.createElement(Btn, {
+    onClick: syncStrava,
+    color: stravaTokens?.access_token ? C.green : C.muted,
+    style: {
+      width: "100%",
+      marginTop: 8
+    }
+  }, syncing ? "⏳ Synkroniserer..." : "🔄 Synkroniser fra Strava"), syncResult && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: syncResult.type === "error" ? C.red : C.green,
+      marginTop: 8
+    }
+  }, syncResult.msg)));
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function App() {
-  const [tab,setTab]=useState("dashboard");
-  const [sessions,setSessions]=useStore("nm_sessions",[]);
-  const [morningData,setMorningData]=useStore("nm_morning",{});
-  const [goals,setGoals]=useStore("nm_goals",[]);
-  const [plannedSessions,setPlannedSessions]=useStore("nm_plan",{});
-  const [strengthLog,setStrengthLog]=useStore("nm_strength",{});
-  const [profile,setProfile]=useStore("nm_profile",{ name:"", normHr:"50", normHrv:"65", maxHr:"185", zone1:"", zone2:"", zone3:"", zone4:"", zone5:"", weightKg:"", birthYear:"" });
+  const [tab, setTab] = React.useState("dashboard");
+  const [sessions, setSessions] = useStore("nm_sessions", []);
+  const [morningData, setMorningData] = useStore("nm_morning", {});
+  const [goals, setGoals] = useStore("nm_goals", []);
+  const [plannedSessions, setPlannedSessions] = useStore("nm_plan", {});
+  const [strengthLog, setStrengthLog] = useStore("nm_strength", {});
+  const [profile, setProfile] = useStore("nm_profile", {
+    name: "",
+    normHr: "50",
+    normHrv: "65",
+    maxHr: "185",
+    zone1: "",
+    zone2: "",
+    zone3: "",
+    zone4: "",
+    zone5: "",
+    weightKg: "",
+    birthYear: ""
+  });
+  const [userId] = useStore("nm_user_id", "");
+  const [supabaseUrl] = useStore("nm_supabase_url", "");
+  const [supabaseKey] = useStore("nm_supabase_key", "");
 
-  const tabContent={
-    dashboard:<DashboardTab sessions={sessions} morningData={morningData} setMorningData={setMorningData} goals={goals} plannedSessions={plannedSessions} profile={profile}/>,
-    calendar:<CalendarTab plannedSessions={plannedSessions} setPlannedSessions={setPlannedSessions} sessions={sessions}/>,
-    log:<LogTab sessions={sessions} setSessions={setSessions}/>,
-    strength:<StrengthTab strengthLog={strengthLog} setStrengthLog={setStrengthLog}/>,
-    goals:<GoalsTab goals={goals} setGoals={setGoals} sessions={sessions}/>,
-    nutrition:<NutritionTab/>,
-    recovery:<RecoveryTab sessions={sessions} morningData={morningData}/>,
-    strava:<StravaTab sessions={sessions} setSessions={setSessions}/>,
-    profile:<ProfileTab profile={profile} setProfile={setProfile}/>,
+  // Set globals for Supabase
+  React.useEffect(() => {
+    window.SUPABASE_URL = supabaseUrl;
+    window.SUPABASE_ANON_KEY = supabaseKey;
+  }, [supabaseUrl, supabaseKey]);
+
+  // Load from Supabase on mount if configured
+  React.useEffect(() => {
+    if (!supabaseUrl || !supabaseKey || !userId) return;
+    loadFromSupabase(userId).then(data => {
+      if (!data) return;
+      if (data.nm_sessions) setSessions(data.nm_sessions);
+      if (data.nm_morning) setMorningData(data.nm_morning);
+      if (data.nm_goals) setGoals(data.nm_goals);
+      if (data.nm_plan) setPlannedSessions(data.nm_plan);
+      if (data.nm_strength) setStrengthLog(data.nm_strength);
+      if (data.nm_profile) setProfile(data.nm_profile);
+    });
+  }, [supabaseUrl, supabaseKey, userId]);
+  const TABS = [{
+    id: "dashboard",
+    icon: "📊",
+    label: "Dag"
+  }, {
+    id: "calendar",
+    icon: "📅",
+    label: "Kalender"
+  }, {
+    id: "log",
+    icon: "✍️",
+    label: "Logg"
+  }, {
+    id: "strength",
+    icon: "💪",
+    label: "Styrke"
+  }, {
+    id: "goals",
+    icon: "🎯",
+    label: "Mål"
+  }, {
+    id: "profile",
+    icon: "👤",
+    label: "Profil"
+  }];
+  const tabContent = {
+    dashboard: /*#__PURE__*/React.createElement(DashboardTab, {
+      sessions: sessions,
+      morningData: morningData,
+      setMorningData: setMorningData,
+      goals: goals,
+      plannedSessions: plannedSessions,
+      profile: profile,
+      userId: userId
+    }),
+    calendar: /*#__PURE__*/React.createElement(CalendarTab, {
+      plannedSessions: plannedSessions,
+      setPlannedSessions: setPlannedSessions,
+      sessions: sessions,
+      goals: goals,
+      profile: profile,
+      userId: userId
+    }),
+    log: /*#__PURE__*/React.createElement(LogTab, {
+      sessions: sessions,
+      setSessions: setSessions,
+      userId: userId
+    }),
+    strength: /*#__PURE__*/React.createElement(StrengthTab, {
+      strengthLog: strengthLog,
+      setStrengthLog: setStrengthLog,
+      userId: userId
+    }),
+    goals: /*#__PURE__*/React.createElement(GoalsTab, {
+      goals: goals,
+      setGoals: setGoals,
+      sessions: sessions,
+      userId: userId
+    }),
+    profile: /*#__PURE__*/React.createElement(ProfileTab, {
+      profile: profile,
+      setProfile: setProfile,
+      sessions: sessions,
+      setSessions: setSessions,
+      userId: userId
+    })
   };
-
-  const TABS=[
-    {id:"dashboard",icon:"📊",label:"Dag"},
-    {id:"calendar",icon:"📅",label:"Kalender"},
-    {id:"log",icon:"✍️",label:"Logg"},
-    {id:"strength",icon:"💪",label:"Styrke"},
-    {id:"goals",icon:"🎯",label:"Mål"},
-    {id:"nutrition",icon:"🥗",label:"Mat"},
-    {id:"recovery",icon:"💤",label:"Restitusjon"},
-    {id:"strava",icon:"🟠",label:"Strava"},
-    {id:"profile",icon:"👤",label:"Profil"},
-  ];
-
-  return (
-    <div style={{ background:C.bg, minHeight:"100vh", fontFamily:"'Segoe UI', system-ui, sans-serif", color:C.text }}>
-      {/* Header */}
-      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"12px 16px", position:"sticky", top:0, zIndex:50, boxShadow:C.shadow }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <div style={{ width:32, height:32, borderRadius:8, background:C.accent+"18", border:`1.5px solid ${C.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>🏃</div>
-          <div>
-            <div style={{ fontWeight:800, fontSize:15, color:C.text }}>Norwegian Method</div>
-            <div style={{ fontSize:10, color:C.muted, letterSpacing:1 }}>TRENINGSDAGBOK</div>
-          </div>
-          {profile?.name&&<div style={{ marginLeft:"auto", fontSize:13, color:C.muted, fontWeight:600 }}>{profile.name}</div>}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div style={{ padding:"16px 14px 100px", maxWidth:520, margin:"0 auto" }}>
-        {tabContent[tab]}
-      </div>
-
-      {/* Bottom nav */}
-      <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", padding:"6px 0 8px", zIndex:50, boxShadow:"0 -2px 8px rgba(0,0,0,0.06)" }}>
-        {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1, background:"none", border:"none", cursor:"pointer", padding:"3px 1px",
-            display:"flex", flexDirection:"column", alignItems:"center", gap:1
-          }}>
-            <span style={{ fontSize:17 }}>{t.icon}</span>
-            <span style={{ fontSize:9, fontWeight:tab===t.id?700:400, color:tab===t.id?C.accent:C.muted }}>{t.label}</span>
-            {tab===t.id&&<div style={{ width:18, height:2, background:C.accent, borderRadius:2, marginTop:1 }}/>}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.bg,
+      minHeight: "100vh",
+      fontFamily: "'Segoe UI',system-ui,sans-serif",
+      color: C.text
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.surface,
+      borderBottom: `1px solid ${C.border}`,
+      padding: "11px 16px",
+      position: "sticky",
+      top: 0,
+      zIndex: 50,
+      boxShadow: C.shadow
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      background: C.accent + "18",
+      border: `1.5px solid ${C.accent}`,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 15
+    }
+  }, "\uD83C\uDFC3"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontWeight: 800,
+      fontSize: 15,
+      color: C.text
+    }
+  }, "Treningsdagbok"), profile?.name && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginLeft: "auto",
+      fontSize: 13,
+      color: C.muted,
+      fontWeight: 600
+    }
+  }, profile.name), userId && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: C.green,
+      marginLeft: profile?.name ? "4px" : "auto"
+    }
+  }, "\u2601\uFE0F"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px 14px 100px",
+      maxWidth: 520,
+      margin: "0 auto"
+    }
+  }, tabContent[tab]), /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "fixed",
+      bottom: 0,
+      left: 0,
+      right: 0,
+      background: C.surface,
+      borderTop: `1px solid ${C.border}`,
+      display: "flex",
+      padding: "6px 0 8px",
+      zIndex: 50,
+      boxShadow: "0 -2px 8px rgba(0,0,0,0.06)"
+    }
+  }, TABS.map(t => /*#__PURE__*/React.createElement("button", {
+    key: t.id,
+    onClick: () => setTab(t.id),
+    style: {
+      flex: 1,
+      background: "none",
+      border: "none",
+      cursor: "pointer",
+      padding: "3px 1px",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: 1
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 17
+    }
+  }, t.icon), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 9,
+      fontWeight: tab === t.id ? 700 : 400,
+      color: tab === t.id ? C.accent : C.muted
+    }
+  }, t.label), tab === t.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 18,
+      height: 2,
+      background: C.accent,
+      borderRadius: 2,
+      marginTop: 1
+    }
+  })))));
 }
 
-ReactDOM.render(React.createElement(App), document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
   </script>
 </body>
 </html>
