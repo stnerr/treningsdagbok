@@ -1,17 +1,16 @@
 <!DOCTYPE html>
 <html lang="no">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <title>🏃 Norwegian Method – Treningsdagbok</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0a0f1a">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="theme-color" content="#ffffff">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-    body { background: #0a0f1a; font-family: 'Segoe UI', system-ui, sans-serif; }
-    input, select, textarea, button { font-family: inherit; }
-    input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+    body{background:#f0f4f8;font-family:'Segoe UI',system-ui,sans-serif;}
+    input,select,textarea,button{font-family:inherit;}
   </style>
 </head>
 <body>
@@ -22,1214 +21,727 @@
   <script type="text/babel" data-presets="react">
 const { useState, useEffect, useRef } = React;
 
-// ─── PALETTE & CONSTANTS ────────────────────────────────────────────────────
+// ─── LIGHT PALETTE ───────────────────────────────────────────────────────────
 const C = {
-  bg: "#0a0f1a",
-  surface: "#111827",
-  card: "#161f2e",
-  border: "#1e2d45",
-  accent: "#00d4ff",
-  accentDim: "#0099bb",
-  green: "#00e676",
-  yellow: "#ffd740",
-  red: "#ff5252",
-  orange: "#ff9800",
-  text: "#e8f4fd",
-  muted: "#6b8aaa",
+  bg: "#f0f4f8",
+  surface: "#ffffff",
+  card: "#ffffff",
+  border: "#dde3ea",
+  accent: "#2563eb",
+  accentLight: "#eff6ff",
+  green: "#16a34a",
+  greenLight: "#f0fdf4",
+  yellow: "#d97706",
+  yellowLight: "#fffbeb",
+  red: "#dc2626",
+  redLight: "#fef2f2",
+  orange: "#ea580c",
+  text: "#1e293b",
+  muted: "#64748b",
   white: "#ffffff",
+  shadow: "0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)",
 };
 
-const DAYS = ["Søndag", "Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag"];
-const MONTHS = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
+const DAYS = ["Søndag","Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag"];
+const DAYS_SHORT = ["Søn","Man","Tir","Ons","Tor","Fre","Lør"];
+const MONTHS = ["januar","februar","mars","april","mai","juni","juli","august","september","oktober","november","desember"];
+const MONTHS_SHORT = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
 
-const PLANNED_SESSIONS = {
-  1: { type: "intervals", label: "🏃 Intervaller", desc: "2x4 min @ 5k-pace, 4x1 min @ mile-pace, 90s pause", intensity: "hard" },
-  2: { type: "strength", label: "💪 Styrke + alternativ", desc: "Rolig styrke + sykling/svømming", intensity: "easy" },
-  3: { type: "easy", label: "🌿 Rolig jogging", desc: "Aerob terskel, snakketempo, 45–60 min", intensity: "easy" },
-  4: { type: "intervals", label: "🏃 Intervaller", desc: "5x6 min @ terskel, 2 min pause", intensity: "hard" },
-  5: { type: "bike", label: "🚴 Sykkel / Fri", desc: "Lett sykkeltur eller hviledag", intensity: "easy" },
-  6: { type: "long", label: "🏔️ Langtur", desc: "Rolig langtur, bygg utholdenhets-base", intensity: "medium" },
-  0: { type: "rest", label: "😴 Fri / Sykkel", desc: "Hvile eller lett sykling", intensity: "rest" },
+const DEFAULT_WEEKLY = {
+  1: [{ type:"intervals", label:"🏃 Intervaller", desc:"2x4 min @ 5k-pace, 4x1 min @ mile-pace, 90s pause", intensity:"hard" }],
+  2: [{ type:"strength", label:"💪 Styrke", desc:"Rolig styrke + sykling/svømming", intensity:"easy" }],
+  3: [{ type:"easy", label:"🌿 Rolig jogging", desc:"Aerob terskel, snakketempo, 45–60 min", intensity:"easy" }],
+  4: [{ type:"intervals", label:"🏃 Intervaller", desc:"5x6 min @ terskel, 2 min pause", intensity:"hard" }],
+  5: [{ type:"bike", label:"🚴 Sykkel / Fri", desc:"Lett sykkeltur eller hviledag", intensity:"easy" }],
+  6: [{ type:"long", label:"🏔️ Langtur", desc:"Rolig langtur, bygg utholdenhets-base", intensity:"medium" }],
+  0: [],
 };
 
 const NUTRITION = {
-  intervals: {
-    before: "2–3t før: havregrøt + banan + honning. 30 min før: isotonisk drikke (500ml). Unngå fett og fiber.",
-    during: "Gel eller datoer hvert 20 min ved økt >45 min. 150–200ml vann hvert 15 min.",
-    after: "Innen 30 min: 20–25g protein (sjokolademelk/recovery-shake) + enkle karbohydrater. 2t etter: fullverdig middag.",
-    general: "Høy-karbo dag. 7–10g karbo/kg kroppsvekt. Jern: 1–2 porsjoner rødt kjøtt/uke eller linser. Vitamin C med jernrik mat.",
-  },
-  easy: {
-    before: "1–2t før: brød + peanøttsmør eller yoghurt + granola. Trenger ikke laste opp.",
-    during: "Vann holder for < 60 min. Elektrolytter ved varmt vær.",
-    after: "Normalt måltid med proteiner (kylling, fisk, egg) og grønnsaker. Ikke overdriv karbo.",
-    general: "Balansert dag. 5–7g karbo/kg. Fokus på mikronæring: jern, B12, D-vitamin, magnesium.",
-  },
-  long: {
-    before: "Kvelden før: pasta eller ris. Morgen: havregrøt + frukt. 30 min før: gel + kaffe.",
-    during: "30–60g karbo/t etter første time. Gel, banan, energibarer. Drikk etter tørste.",
-    after: "Recovery-måltid med 1:4 protein/karbo-ratio. Salterstatning ved svetting. Planlegg restitusjonsmåltid.",
-    general: "Karbolasting 2 dager før. Høyt inntak løpedagen. Rehydrer neste dag.",
-  },
-  bike: {
-    before: "Lett måltid 1t før. Ingenting fancy.",
-    during: "Vann + elektrolytter. Frukt ved langtur.",
-    after: "Normalt restitusjons-måltid.",
-    general: "Lett dag = lett mat. Prioriter grønnsaker, omega-3 (laks, makrell), antioksidanter.",
-  },
-  strength: {
-    before: "Protein + karbo 1–2t før. Yoghurt + bær fungerer fint.",
-    during: "Vann.",
-    after: "20–30g protein innen 30 min etter styrke. Viktig for muskelvekst.",
-    general: "Styrkedag: øk protein til 1.8–2.2g/kg. Kreatin (3–5g/dag) kan vurderes.",
-  },
-  rest: {
-    before: "–",
-    during: "–",
-    after: "–",
-    general: "Hviledag: lavere kaloribehov. Fokus på antioksidanter (bær, mørk sjokolade), omega-3, søvnforberedelse.",
-  },
+  intervals:{ before:"2–3t før: havregrøt + banan + honning. 30 min før: isotonisk drikke (500ml).", during:"Gel hvert 20 min ved økt >45 min. 150–200ml vann hvert 15 min.", after:"Innen 30 min: 20–25g protein + enkle karbohydrater.", general:"Høy-karbo dag. 7–10g karbo/kg. Jern: rødt kjøtt/linser + C-vitamin." },
+  easy:{ before:"1–2t før: brød + peanøttsmør eller yoghurt + granola.", during:"Vann holder for < 60 min.", after:"Normalt måltid med protein og grønnsaker.", general:"Balansert dag. 5–7g karbo/kg. Fokus på jern, B12, D-vitamin." },
+  long:{ before:"Kvelden før: pasta/ris. Morgen: havregrøt + frukt + kaffe.", during:"30–60g karbo/t etter første time.", after:"Recovery: 1:4 protein/karbo-ratio innen 30 min.", general:"Karbolasting 2 dager før. Rehydrer neste dag." },
+  bike:{ before:"Lett måltid 1t før.", during:"Vann + elektrolytter.", after:"Normalt restitusjonsmåltid.", general:"Lett dag: grønnsaker, omega-3, antioksidanter." },
+  strength:{ before:"Protein + karbo 1–2t før.", during:"Vann.", after:"20–30g protein innen 30 min.", general:"Styrkedag: 1.8–2.2g protein/kg. Kreatin kan vurderes." },
+  rest:{ before:"–", during:"–", after:"–", general:"Lavere kaloribehov. Antioksidanter, omega-3, søvnforberedelse." },
 };
 
 const RECOVERY = {
-  intervals: { hours: "36–48 timer full restitusjon", tips: ["Isfolie på legg/knær hvis ømme", "Proteinrik snack før leggetid", "Skumrulling + tøying etter 2t", "Sov 8+ timer", "Lett gange neste dag OK"] },
-  easy: { hours: "12–18 timer", tips: ["Lett stretching", "Hydrering", "Normal søvn holder"] },
-  long: { hours: "48–72 timer", tips: ["Kompresjonssokker", "Kald fot-bad (10–15 min)", "Lett yoga eller gange neste dag", "Ekstra protein og jern", "Prioriter 9 timers søvn"] },
-  bike: { hours: "6–12 timer", tips: ["Lav belastning, rask restitusjon", "Hydrering og mat holder"] },
-  strength: { hours: "24–36 timer (muskelrestitusjon)", tips: ["Lett kompresjon", "Protein viktig", "Unngå hard løping dagen etter"] },
-  rest: { hours: "–", tips: ["Nyt hvilen, det er en del av treningen!"] },
+  intervals:{ hours:"36–48 timer", tips:["Isfolie på legg/knær","Proteinrik snack før leggetid","Skumrulling + tøying","Sov 8+ timer"] },
+  easy:{ hours:"12–18 timer", tips:["Lett stretching","Hydrering","Normal søvn"] },
+  long:{ hours:"48–72 timer", tips:["Kompresjonssokker","Kald fotbad 10–15 min","Ekstra protein og jern","9 timers søvn"] },
+  bike:{ hours:"6–12 timer", tips:["Lav belastning, rask restitusjon"] },
+  strength:{ hours:"24–36 timer", tips:["Protein viktig","Unngå hard løping dagen etter"] },
+  rest:{ hours:"–", tips:["Nyt hvilen!"] },
 };
 
-// ─── HELPERS ────────────────────────────────────────────────────────────────
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
-
 function formatDate(str) {
   if (!str) return "";
-  const d = new Date(str + "T00:00:00");
+  const d = new Date(str+"T00:00:00");
   return `${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }
-
-function dayOfWeek(str) {
-  const d = new Date(str + "T00:00:00");
-  return d.getDay();
-}
-
+function dayOfWeek(str) { return new Date(str+"T00:00:00").getDay(); }
 function daysUntil(str) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const target = new Date(str + "T00:00:00");
-  return Math.round((target - today) / 86400000);
+  const t = new Date(); t.setHours(0,0,0,0);
+  return Math.round((new Date(str+"T00:00:00")-t)/86400000);
 }
-
-function weekStr(d = new Date()) {
-  const jan1 = new Date(d.getFullYear(), 0, 1);
-  return `${d.getFullYear()}-W${Math.ceil((((d - jan1) / 86400000) + jan1.getDay() + 1) / 7)}`;
-}
-
 function useStore(key, init) {
   const [val, setValRaw] = useState(() => {
-    try {
-      const s = localStorage.getItem(key);
-      return s ? JSON.parse(s) : init;
-    } catch { return init; }
+    try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : init; } catch { return init; }
   });
-  const [loaded] = useState(true);
-
-  const setVal = (v) => {
-    setValRaw(prev => {
-      const next = typeof v === "function" ? v(prev) : v;
-      try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
-      return next;
-    });
-  };
-
-  return [val, setVal, loaded];
+  const setVal = (v) => setValRaw(prev => {
+    const next = typeof v === "function" ? v(prev) : v;
+    try { localStorage.setItem(key, JSON.stringify(next)); } catch {}
+    return next;
+  });
+  return [val, setVal];
 }
 
-// ─── MINI COMPONENTS ────────────────────────────────────────────────────────
-function Card({ children, style }) {
-  return <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, ...style }}>{children}</div>;
+// ─── MINI COMPONENTS ─────────────────────────────────────────────────────────
+function Card({ children, style, onClick }) {
+  return <div onClick={onClick} style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:16, padding:16, boxShadow:C.shadow, cursor:onClick?"pointer":"default", ...style }}>{children}</div>;
 }
-
-function Badge({ label, color }) {
-  return <span style={{ background: color + "22", color, border: `1px solid ${color}44`, borderRadius: 20, padding: "2px 10px", fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>{label}</span>;
+function Badge({ label, color, bg }) {
+  return <span style={{ background:bg||color+"18", color, border:`1px solid ${color}33`, borderRadius:20, padding:"2px 10px", fontSize:11, fontWeight:700 }}>{label}</span>;
 }
-
-function Stat({ label, value, unit, color = C.accent }) {
+function Stat({ label, value, unit, color=C.accent }) {
   return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 26, fontWeight: 800, color, fontFamily: "monospace" }}>{value}<span style={{ fontSize: 13, color: C.muted }}>{unit}</span></div>
-      <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{label}</div>
+    <div style={{ textAlign:"center" }}>
+      <div style={{ fontSize:24, fontWeight:800, color, fontFamily:"monospace" }}>{value}<span style={{ fontSize:12, color:C.muted }}> {unit}</span></div>
+      <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{label}</div>
     </div>
   );
 }
-
-function Input({ label, value, onChange, type = "text", min, max, step, placeholder, style }) {
+function Input({ label, value, onChange, type="text", step, placeholder, style }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      {label && <div style={{ fontSize: 11, color: C.muted, marginBottom: 4, letterSpacing: 0.5 }}>{label}</div>}
-      <input
-        type={type} value={value} onChange={e => onChange(e.target.value)}
-        min={min} max={max} step={step} placeholder={placeholder}
-        style={{
-          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px",
-          color: C.text, fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none", ...style
-        }}
-      />
+    <div style={{ marginBottom:12 }}>
+      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} step={step} placeholder={placeholder}
+        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none", ...style }} />
     </div>
   );
 }
-
-function Textarea({ label, value, onChange, rows = 3, placeholder }) {
+function Textarea({ label, value, onChange, rows=3, placeholder }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      {label && <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>}
-      <textarea
-        value={value} onChange={e => onChange(e.target.value)} rows={rows} placeholder={placeholder}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 13, width: "100%", boxSizing: "border-box", resize: "vertical", outline: "none" }}
-      />
+    <div style={{ marginBottom:12 }}>
+      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
+      <textarea value={value} onChange={e=>onChange(e.target.value)} rows={rows} placeholder={placeholder}
+        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:13, width:"100%", boxSizing:"border-box", resize:"vertical", outline:"none" }} />
     </div>
   );
 }
-
 function Select({ label, value, onChange, options }) {
   return (
-    <div style={{ marginBottom: 12 }}>
-      {label && <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>{label}</div>}
-      <select value={value} onChange={e => onChange(e.target.value)}
-        style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 12px", color: C.text, fontSize: 14, width: "100%", boxSizing: "border-box", outline: "none" }}>
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    <div style={{ marginBottom:12 }}>
+      {label && <div style={{ fontSize:11, color:C.muted, marginBottom:4, fontWeight:600 }}>{label}</div>}
+      <select value={value} onChange={e=>onChange(e.target.value)}
+        style={{ background:C.bg, border:`1.5px solid ${C.border}`, borderRadius:8, padding:"8px 12px", color:C.text, fontSize:14, width:"100%", boxSizing:"border-box", outline:"none" }}>
+        {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );
 }
-
-function Btn({ children, onClick, color = C.accent, small, style }) {
+function Btn({ children, onClick, color=C.accent, small, outline, style }) {
+  const bg = outline ? "transparent" : color;
   return (
     <button onClick={onClick} style={{
-      background: color + "22", border: `1px solid ${color}55`, color, borderRadius: 8,
-      padding: small ? "5px 12px" : "9px 18px", fontSize: small ? 12 : 14, fontWeight: 700,
-      cursor: "pointer", transition: "all .15s", ...style
+      background: outline ? "transparent" : color+"18",
+      border:`1.5px solid ${color}`,
+      color: outline ? color : color,
+      borderRadius:8, padding:small?"5px 12px":"9px 18px",
+      fontSize:small?12:14, fontWeight:700, cursor:"pointer", transition:"all .15s", ...style
     }}
-      onMouseEnter={e => e.target.style.background = color + "44"}
-      onMouseLeave={e => e.target.style.background = color + "22"}
+      onMouseEnter={e=>{ e.currentTarget.style.background=color+"30"; }}
+      onMouseLeave={e=>{ e.currentTarget.style.background=outline?"transparent":color+"18"; }}
     >{children}</button>
   );
 }
+function typeLabel(type) {
+  return type==="intervals"?"🏃 Intervaller":type==="easy"?"🌿 Rolig jogging":type==="long"?"🏔️ Langtur":type==="bike"?"🚴 Sykkel":type==="strength"?"💪 Styrke":"😴 Hvile";
+}
+function intensityColor(intensity) {
+  return intensity==="hard"?C.red:intensity==="medium"?C.yellow:intensity==="easy"?C.green:C.muted;
+}
 
-// ─── REGELBASERT ANALYSE ENGINE (Norwegian Method) ──────────────────────────
+// ─── ANALYSE ENGINE ──────────────────────────────────────────────────────────
+function analyzeDashboard({ hr, hrv, sleep, feel, sessions, goals, todayType, profile }) {
+  const tips=[], warnings=[];
+  const normHrv = parseFloat(profile?.normHrv)||65;
+  const normHr = parseFloat(profile?.normHr)||50;
 
-function analyzeDashboard({ hr, hrv, sleep, feel, sessions, goals, todayType }) {
-  const tips = [];
-  const warnings = [];
-
-  // HRV-analyse
   if (hrv) {
-    const hvArr = []; // samles fra morningData utenfor
-    const h = parseFloat(hrv);
-    if (h < 40) warnings.push("⚠️ Lav HRV i dag – kroppen signaliserer stress eller utilstrekkelig restitusjon. Vurder å bytte dagens økt til lett gange eller hvile.");
-    else if (h > 80) tips.push("✅ HRV er høy – kroppen er klar for belastning. Grønt lys for hard økt i dag.");
-    else tips.push("🟡 HRV er normal – gjennomfør planlagt økt, men lytt til kroppen underveis.");
+    const h=parseFloat(hrv), diff=((h-normHrv)/normHrv)*100;
+    if (diff<-15) warnings.push(`⚠️ HRV ${h}ms er ${Math.abs(diff.toFixed(0))}% under din norm (${normHrv}ms). Kroppen signaliserer stress. Vurder hvile eller lett økt.`);
+    else if (diff>15) tips.push(`✅ HRV ${h}ms er over din norm. Kroppen er klar – grønt lys for hard økt!`);
+    else tips.push(`🟡 HRV normal (${h}ms). Gjennomfør planlagt økt.`);
   }
-
-  // Hvilepuls-analyse
   if (hr) {
-    const h = parseFloat(hr);
-    if (h > 60) warnings.push("🔴 Forhøyet hvilepuls kan indikere sykdom, overtrening eller dårlig søvn. Vurder hviledag.");
-    else if (h < 45) tips.push("💚 Lav hvilepuls – tegn på god aerob form og god restitusjon.");
+    const h=parseFloat(hr), diff=h-normHr;
+    if (diff>7) warnings.push(`🔴 Hvilepuls ${h} bpm er ${diff.toFixed(0)} over din norm. Mulig overtrening eller sykdom.`);
+    else if (h<normHr-5) tips.push(`💚 Lav hvilepuls (${h} bpm) – god aerob form og restitusjon.`);
   }
-
-  // Søvn
   if (sleep) {
-    const s = parseFloat(sleep);
-    if (s < 6) warnings.push("😴 Under 6 timer søvn nullstiller store deler av treningsgevinsten. Hard økt i dag gir minimal effekt – ta det rolig.");
-    else if (s < 7) warnings.push("😐 Litt lite søvn. Gjennomfør planlagt økt, men ikke push hardt.");
-    else if (s >= 8) tips.push("🌙 God søvn – restitusjonen har fungert optimalt i natt.");
+    const s=parseFloat(sleep);
+    if (s<6) warnings.push("😴 Under 6t søvn nullstiller treningsgevinsten. Ta det rolig i dag.");
+    else if (s>=8) tips.push("🌙 God søvn – restitusjonen er optimal.");
   }
-
-  // Dagsform
   if (feel) {
-    const f = parseInt(feel);
-    if (f <= 2) warnings.push("😕 Lav dagsform. Norwegian Method: lytt til kroppen. Bytt til lett alternativ økt i dag.");
-    else if (f === 5) tips.push("🔥 Toppform i dag – utnytt det med god innsats på planlagt økt!");
+    const f=parseInt(feel);
+    if (f<=2) warnings.push("😕 Lav dagsform – bytt til lett alternativ i dag.");
+    else if (f===5) tips.push("🔥 Toppform – utnytt det!");
   }
-
-  // Treningsbelastning siste 7 dager
-  const now = new Date();
-  const last7 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 7);
-  const hardSessions = last7.filter(s => s.type === "intervals");
-  const totalKm = last7.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
-
-  if (hardSessions.length >= 3) warnings.push(`🚨 ${hardSessions.length} harde økter siste 7 dager – dette er over anbefalt max (2). Fare for overtrening. Prioriter restitusjon.`);
-  else if (hardSessions.length === 2) tips.push("⚖️ 2 harde økter denne uken – i tråd med Norwegian Method. Resten bør være sone 1–2.");
-
-  if (totalKm > 80) warnings.push(`📈 ${totalKm.toFixed(0)}km denne uken er høyt. Øk ikke mer enn 10% per uke.`);
-  else if (totalKm > 0) tips.push(`📊 ${totalKm.toFixed(0)}km denne uken. Hold deg under 10% økning uke for uke.`);
-
-  // Øktspesifikk anbefaling
-  if (todayType === "intervals") {
-    tips.push("🏃 Intervalldag: Varm opp 15–20 min rolig. Kjør dragene på terskelintensitet – du skal kunne si korte setninger, ikke puste fritt. Avslutt med 10 min nedjogg.");
-  } else if (todayType === "easy") {
-    tips.push("🌿 Rolig dag: Hold deg i sone 1–2 hele tiden. Snakketempo. Ingen heroisme i dag – dette er der den aerobe basen bygges.");
-  } else if (todayType === "long") {
-    tips.push("🏔️ Langtur: Start rolig, avslutt rolig. Ta med karbohydrater fra km 45–60. Husk: langtur skal føles lett neste dag.");
+  const now=new Date();
+  const last7=sessions.filter(s=>(now-new Date(s.date+"T00:00:00"))/86400000<=7);
+  const hard=last7.filter(s=>s.type==="intervals");
+  const km=last7.reduce((a,s)=>a+(parseFloat(s.km)||0),0);
+  if (hard.length>=3) warnings.push(`🚨 ${hard.length} harde økter siste 7 dager – over anbefalt max (2). Overtrening-risiko.`);
+  if (km>0) tips.push(`📊 ${km.toFixed(0)}km denne uken. Hold økning under 10%/uke.`);
+  if (todayType==="intervals") tips.push("🏃 Intervalldag: Varm opp 15–20 min. Kjør på terskelintensitet – korte setninger OK, ikke puste fritt.");
+  else if (todayType==="easy") tips.push("🌿 Rolig dag: Sone 1–2 hele veien. Snakketempo. Her bygges den aerobe basen.");
+  else if (todayType==="long") tips.push("🏔️ Langtur: Start og avslutt rolig. Ta med karbo fra km 45–60.");
+  if (goals.length>0) {
+    const g=goals[0], days=daysUntil(g.date);
+    if (days>0&&days<14) tips.push(`🎯 ${days} dager til ${g.name}! Tapering: reduser volum 40%, behold intensitet.`);
+    else if (days>0&&days<30) tips.push(`🎯 ${days} dager til ${g.name}. Fokus på kvalitetsøkter og søvn.`);
   }
-
-  // Mål-progresjon
-  if (goals.length > 0) {
-    const g = goals[0];
-    const days = daysUntil(g.date);
-    if (days > 0 && days < 14) tips.push(`🎯 ${days} dager til ${g.name}! Nå er det taperingsfase – reduser volum 40%, behold intensitet.`);
-    else if (days > 0 && days < 30) tips.push(`🎯 ${days} dager til ${g.name}. Fokuser på kvalitetsøkter og søvn. Unngå sykdom.`);
-  }
-
-  if (warnings.length === 0 && tips.length === 0) return "Legg inn morgendata (hvilepuls, HRV, søvn) for å få personlige anbefalinger basert på Norwegian Method.";
-  return [...warnings, ...tips].join("\n\n");
+  if (!warnings.length&&!tips.length) return ["Legg inn morgendata for personlige anbefalinger basert på Norwegian Method."];
+  return [...warnings,...tips];
 }
 
 function analyzeGoalProgress({ goal, sessions }) {
-  const lines = [];
-  const days = daysUntil(goal.date);
-  if (days < 0) return "Dette løpet er allerede passert.";
-
-  const last4weeks = sessions.filter(s => {
-    const d = new Date(s.date + "T00:00:00");
-    return (new Date() - d) / 86400000 <= 28;
-  });
-
-  const totalKm = last4weeks.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
-  const kmPerWeek = totalKm / 4;
-  const hardCount = last4weeks.filter(s => s.type === "intervals").length;
-  const easyCount = last4weeks.filter(s => ["easy", "bike", "strength"].includes(s.type)).length;
-  const ratio = hardCount + easyCount > 0 ? hardCount / (hardCount + easyCount) : 0;
-
-  // Km-anbefaling basert på distanse
-  const dist = parseFloat(goal.distanceKm) || 0;
-  let recommendedKmWeek = dist < 10 ? 30 : dist < 21.1 ? 50 : dist < 42.2 ? 70 : 80;
-
+  const lines=[];
+  const days=daysUntil(goal.date);
+  if (days<0) return ["Dette løpet er passert."];
+  const last4=sessions.filter(s=>(new Date()-new Date(s.date+"T00:00:00"))/86400000<=28);
+  const km=last4.reduce((a,s)=>a+(parseFloat(s.km)||0),0)/4;
+  const hard=last4.filter(s=>s.type==="intervals").length;
+  const easy=last4.filter(s=>["easy","bike","strength"].includes(s.type)).length;
+  const ratio=hard+easy>0?hard/(hard+easy):0;
+  const dist=parseFloat(goal.distanceKm)||0;
+  const rec=dist<10?30:dist<21.1?50:dist<42.2?70:80;
   lines.push(`📅 ${days} dager til ${goal.name}`);
-
-  if (kmPerWeek < recommendedKmWeek * 0.6) lines.push(`📉 For lite volum: ${kmPerWeek.toFixed(0)}km/uke. Anbefalt for ${dist}km-løp: ~${recommendedKmWeek}km/uke. Øk gradvis med maks 10%/uke.`);
-  else if (kmPerWeek > recommendedKmWeek * 1.3) lines.push(`📈 Høyt volum (${kmPerWeek.toFixed(0)}km/uke). Vær oppmerksom på skaderisiko. Prioriter søvn og ernæring.`);
-  else lines.push(`✅ Godt treningsvolum: ${kmPerWeek.toFixed(0)}km/uke – passer bra til målet.`);
-
-  // 80/20-sjekk
-  if (ratio > 0.35) lines.push(`⚠️ For høy andel harde økter (${Math.round(ratio*100)}%). Norwegian Method anbefaler maks 20%. Reduser intervallhyppighet.`);
-  else if (ratio > 0 && ratio <= 0.25) lines.push(`✅ God intensitetsfordeling: ${Math.round(ratio*100)}% harde økter – tett på 80/20-idealet.`);
-
-  // Tempo-analyse
-  const runSessions = last4weeks.filter(s => s.avgPace && s.type !== "bike");
-  if (runSessions.length >= 2) {
-    const paces = runSessions.map(s => {
-      const parts = s.avgPace.split(":").map(Number);
-      return parts[0] + (parts[1] || 0) / 60;
-    }).filter(p => p > 0 && p < 20);
-    if (paces.length >= 2) {
-      const trend = paces[paces.length - 1] - paces[0];
-      if (trend < -0.1) lines.push(`🚀 Tempotrend er positiv – du løper raskere nå enn for 4 uker siden. Bra progresjon!`);
-      else if (trend > 0.15) lines.push(`🐢 Tempoet har gått litt ned. Sjekk om du trener for hardt eller har for lite restitusjon.`);
-    }
-  }
-
-  // Tapering
-  if (days <= 14) lines.push(`⬇️ TAPERING: Reduser ukesvolum med 40–50%. Behold 1 terskeløkt. Unngå nye stimuli. Sov mye.`);
-  else if (days <= 21) lines.push(`🔧 3 uker igjen: Gjennomfør siste tøffe treningsblokk denne uken, deretter reduksjon.`);
-
-  if (last4weeks.length === 0) return `Ingen loggførte økter ennå. Loggfør treningsøktene dine så kan jeg analysere fremgangen mot ${goal.name}.`;
-  return lines.join("\n\n");
+  if (km<rec*0.6) lines.push(`📉 For lite volum: ${km.toFixed(0)}km/uke. Anbefalt: ~${rec}km/uke.`);
+  else if (km>rec*1.3) lines.push(`📈 Høyt volum (${km.toFixed(0)}km/uke). Skaderisiko – prioriter søvn.`);
+  else lines.push(`✅ Godt volum: ${km.toFixed(0)}km/uke.`);
+  if (ratio>0.35) lines.push(`⚠️ For mange harde økter (${Math.round(ratio*100)}%). Maks 20% etter Norwegian Method.`);
+  else if (ratio>0) lines.push(`✅ Intensitetsfordeling OK: ${Math.round(ratio*100)}% harde.`);
+  if (days<=14) lines.push("⬇️ TAPERING: -40–50% volum. Behold 1 terskeløkt. Sov mye.");
+  else if (days<=21) lines.push("🔧 3 uker igjen: Siste tøffe blokk nå, deretter nedtrapping.");
+  if (!last4.length) return [`Loggfør økter for å analysere fremgangen mot ${goal.name}.`];
+  return lines;
 }
 
-function analyzeNutrition({ todayType, sessions }) {
-  const nut = NUTRITION[todayType] || NUTRITION.easy;
-  const last3 = sessions.slice(0, 3);
-  const lines = [];
-
-  if (todayType === "intervals") {
-    lines.push("⚡ INTERVALLDAG – KARBOLASTING:\n• Frokost: 100g havregrøt + 1 banan + 1 ss honning = ~80g karbo\n• 30 min før: 500ml sportsdrikk (30g karbo)\n• Under (>45 min): 1 gel (25g karbo) + vann\n• Innen 30 min etter: 500ml sjokolademelk eller recovery-shake (20g protein + 40g karbo)");
-    lines.push("🥩 JERN-FOKUS: Intervalltrening øker jernbehovet. Spis rødt kjøtt, linser eller mørk sjokolade med C-vitamin i dag.");
-  } else if (todayType === "long") {
-    lines.push("🏔️ LANGTUR-ERNÆRING:\n• Kvelden før: 150g pasta/ris + proteinkilde\n• Frokost: havregrøt + bær + kaffe (koffein øker prestasjon 3–5%)\n• Under: 40–60g karbo/time etter første time. Banan, gel eller dadler.\n• Etter: Innen 30 min – protein + karbo 1:3-ratio");
-    lines.push("💧 VÆSKE: Drikk 400–600ml 2t før start. Under: 400–800ml/time avhengig av svetting og temperatur.");
-  } else if (todayType === "easy") {
-    lines.push("🌿 ROLIG DAG – MIKRONÆRING I FOKUS:\n• Ikke nødvendig med karbolasting\n• Fokus: jern (linser, spinat), omega-3 (laks, makrell), antioksidanter (bær)\n• Protein: 1.6–1.8g/kg fordelt på 4 måltider");
-  } else if (todayType === "rest") {
-    lines.push("😴 HVILEDAG – RESTITUSJONSKOST:\n• Lavere kaloribehov (reduser karbo ~30%)\n• Øk grønnsaker og antioksidanter\n• Tart kirsebærjuice reduserer muskelbetennelse\n• Magnesium (nøtter, mørk sjokolade) støtter søvnkvalitet");
-  }
-
-  lines.push("📊 DAGLIG REFERANSE:\n• Karbo: " + (["intervals","long"].includes(todayType) ? "7–10g/kg" : "5–6g/kg") + "\n• Protein: 1.6–2.0g/kg (fordelt på 4–5 måltider á 20–30g)\n• Fett: 1–1.5g/kg (fokus på umettede fettsyrer)\n• Vann: 35–40ml/kg + erstatning for svette");
-
-  return lines.join("\n\n");
-}
-
-function analyzeRecovery({ lastSession, morningData }) {
-  const lines = [];
-  const hvData = Object.entries(morningData).sort(([a], [b]) => a.localeCompare(b)).slice(-7);
-
-  if (!lastSession) return "Loggfør en økt for å få personlige restitusjonsanbefalinger.";
-
-  const rec = RECOVERY[lastSession.type] || RECOVERY.easy;
-  const rpe = parseInt(lastSession.rpe) || 5;
-
-  lines.push(`⏱️ ANBEFALT RESTITUSJON: ${rec.hours}`);
-
-  if (rpe >= 8) lines.push("🔴 Høy RPE (≥8): Kroppen er hardt belastet. Prioriter søvn, mat og unngå hard aktivitet de neste 48t.");
-  else if (rpe >= 6) lines.push("🟡 Moderat RPE: Normal restitusjon. Lett aktivitet tillatt neste dag.");
-  else lines.push("🟢 Lav RPE: Rask restitusjon. Du kan trene igjen i morgen om planen tilsier det.");
-
-  // HRV-trend
-  if (hvData.length >= 3) {
-    const hrvVals = hvData.map(([, m]) => parseFloat(m.hrv)).filter(Boolean);
-    if (hrvVals.length >= 3) {
-      const avg = hrvVals.reduce((a, b) => a + b, 0) / hrvVals.length;
-      const last = hrvVals[hrvVals.length - 1];
-      const diff = ((last - avg) / avg) * 100;
-      if (diff < -10) lines.push(`📉 HRV-trend er nedadgående (${diff.toFixed(0)}% under snitt). Kroppen er under press – legg inn en ekstra lett dag.`);
-      else if (diff > 10) lines.push(`📈 HRV er over snitt (+${diff.toFixed(0)}%) – restitusjonen går bra!`);
-    }
-  }
-
-  // Søvn siste natt
-  const lastNight = hvData[hvData.length - 1]?.[1];
-  if (lastNight?.sleep) {
-    const s = parseFloat(lastNight.sleep);
-    if (s < 7) lines.push(`😴 Bare ${s}t søvn i natt. For løpere er 8–9t optimalt. Legg deg tidlig i kveld.`);
-  }
-
-  lines.push("💡 RESTITUSJONSPROTOKOLLER:\n• Isfolie/kald dusj: 10–15 min innen 1t etter hard økt\n• Kompresjonssokker: Bruk 2–4t etter langtur\n• Skumrulling: 10 min på legg, lår, glutes\n• Magnesium-bad: 20 min i epsomsalt-bad\n• Lett gange/sykling neste morgen øker blodsirkulasjon uten å bryte ned");
-
-  return lines.join("\n\n");
-}
-
-// ─── TABS ────────────────────────────────────────────────────────────────────
+// ─── TABS ─────────────────────────────────────────────────────────────────────
 const TABS = [
-  { id: "dashboard", icon: "📊", label: "Dashboard" },
-  { id: "plan", icon: "📅", label: "Plan" },
-  { id: "log", icon: "✍️", label: "Logg" },
-  { id: "sessions", icon: "📖", label: "Historikk" },
-  { id: "strength", icon: "💪", label: "Styrke" },
-  { id: "strava", icon: "🟠", label: "Strava" },
-  { id: "goals", icon: "🎯", label: "Mål" },
-  { id: "nutrition", icon: "🥗", label: "Ernæring" },
-  { id: "recovery", icon: "💤", label: "Restitusjon" },
+  { id:"dashboard", icon:"📊", label:"Dag" },
+  { id:"calendar", icon:"📅", label:"Kalender" },
+  { id:"log", icon:"✍️", label:"Logg" },
+  { id:"strength", icon:"💪", label:"Styrke" },
+  { id:"goals", icon:"🎯", label:"Mål" },
+  { id:"nutrition", icon:"🥗", label:"Mat" },
+  { id:"recovery", icon:"💤", label:"Restitusjon" },
+  { id:"strava", icon:"🟠", label:"Strava" },
+  { id:"profile", icon:"👤", label:"Profil" },
 ];
 
-// ─── DASHBOARD TAB ───────────────────────────────────────────────────────────
-function DashboardTab({ sessions, morningData, setMorningData, goals, plannedSessions }) {
-  const today = todayStr();
-  const dow = dayOfWeek(today);
-  const todayPlan = plannedSessions[today] || PLANNED_SESSIONS[dow];
-  const todaySession = sessions.find(s => s.date === today);
-  const todayMorning = morningData[today] || {};
-  const [saving, setSaving] = useState(false);
-  const [hr, setHr] = useState(todayMorning.hr || "");
-  const [hrv, setHrv] = useState(todayMorning.hrv || "");
-  const [sleep, setSleep] = useState(todayMorning.sleep || "");
-  const [feel, setFeel] = useState(todayMorning.feel || "3");
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function DashboardTab({ sessions, morningData, setMorningData, goals, plannedSessions, profile }) {
+  const today=todayStr(), dow=dayOfWeek(today);
+  const todayPlans=(plannedSessions[today]||DEFAULT_WEEKLY[dow]||[]);
+  const todaySessions=sessions.filter(s=>s.date===today);
+  const todayMorning=morningData[today]||{};
+  const [saving,setSaving]=useState(false);
+  const [hr,setHr]=useState(todayMorning.hr||"");
+  const [hrv,setHrv]=useState(todayMorning.hrv||"");
+  const [sleep,setSleep]=useState(todayMorning.sleep||"");
+  const [feel,setFeel]=useState(todayMorning.feel||"3");
 
   function saveMorning() {
     setSaving(true);
-    setMorningData(prev => ({ ...prev, [today]: { hr, hrv, sleep, feel } }));
-    setTimeout(() => setSaving(false), 800);
+    setMorningData(prev=>({...prev,[today]:{hr,hrv,sleep,feel}}));
+    setTimeout(()=>setSaving(false),800);
   }
 
-  function hrScore() {
-    if (!hr) return null;
-    const h = parseFloat(hr);
-    const vals = Object.values(morningData).map(m => parseFloat(m.hr)).filter(Boolean);
-    if (vals.length < 3) return { score: "–", color: C.muted, label: "Trenger mer data" };
-    const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const diff = h - avg;
-    if (diff > 7) return { score: "Lav", color: C.red, label: `+${diff.toFixed(0)} over snitt` };
-    if (diff > 3) return { score: "Moderat", color: C.yellow, label: `+${diff.toFixed(0)} over snitt` };
-    return { score: "God", color: C.green, label: `${diff.toFixed(0)} fra snitt` };
-  }
+  const todayType=todayPlans[0]?.type||"easy";
+  const analysisParts=analyzeDashboard({hr,hrv,sleep,feel,sessions,goals,todayType,profile});
+  const recentKm=sessions.filter(s=>(new Date()-new Date(s.date))/86400000<=7).reduce((a,s)=>a+(parseFloat(s.km)||0),0);
 
-  const analysis = analyzeDashboard({ hr, hrv, sleep, feel, sessions, goals, todayType: todayPlan?.type || "easy" });
-  const analysisParts = analysis.split("\n\n").filter(Boolean);
-
-  const score = hrScore();
-  const recentKm = sessions.filter(s => {
-    const d = new Date(s.date); const now = new Date();
-    return (now - d) / 86400000 <= 7;
-  }).reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  // HR score vs norm
+  const normHr=parseFloat(profile?.normHr)||50;
+  const hrDiff=hr?parseFloat(hr)-normHr:null;
+  const hrColor=hrDiff===null?C.muted:hrDiff>7?C.red:hrDiff>3?C.yellow:C.green;
 
   return (
     <div>
-      <div style={{ marginBottom: 6, color: C.muted, fontSize: 13 }}>{DAYS[dow]} {formatDate(today)}</div>
-      <h2 style={{ color: C.accent, fontSize: 22, margin: "0 0 16px", fontFamily: "Georgia, serif" }}>God morgen! 👋</h2>
+      <div style={{ marginBottom:4, color:C.muted, fontSize:13 }}>{DAYS[dow]} {formatDate(today)}</div>
+      <h2 style={{ color:C.text, fontSize:22, margin:"0 0 16px", fontWeight:800 }}>God morgen! 👋</h2>
 
-      {/* Today's session */}
-      <Card style={{ marginBottom: 12, borderColor: todayPlan?.intensity === "hard" ? C.red + "55" : C.accent + "33" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8 }}>
-          <div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>DAGENS ØKT</div>
-            <div style={{ fontSize: 20, fontWeight: 800 }}>{todayPlan?.label || "Fri"}</div>
-            <div style={{ fontSize: 13, color: C.muted, marginTop: 4 }}>{todayPlan?.desc}</div>
-          </div>
-          {todaySession
-            ? <Badge label="✓ UTFØRT" color={C.green} />
-            : <Badge label="PLANLAGT" color={C.accent} />}
-        </div>
+      {/* Today's sessions */}
+      <Card style={{ marginBottom:12, borderLeft:`4px solid ${todayPlans[0]?.intensity==="hard"?C.red:C.accent}` }}>
+        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:8 }}>DAGENS PLAN</div>
+        {todayPlans.length===0
+          ? <div style={{ color:C.muted }}>😴 Hviledag</div>
+          : todayPlans.map((p,i)=>{
+              const done=todaySessions.some(s=>s.type===p.type);
+              return (
+                <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:i<todayPlans.length-1?`1px solid ${C.border}`:"none" }}>
+                  <div>
+                    <div style={{ fontWeight:700, color:intensityColor(p.intensity) }}>{p.label}</div>
+                    <div style={{ fontSize:12, color:C.muted }}>{p.desc}</div>
+                  </div>
+                  {done?<Badge label="✓ Utført" color={C.green}/>:<Badge label="Planlagt" color={C.accent}/>}
+                </div>
+              );
+            })
+        }
       </Card>
 
       {/* Morning data */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>MORGENREGISTRERING</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input label="Hvilepuls (slag/min)" type="number" value={hr} onChange={setHr} placeholder="f.eks. 42" />
-          <Input label="HRV (ms)" type="number" value={hrv} onChange={setHrv} placeholder="f.eks. 68" />
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:10 }}>MORGENREGISTRERING</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <Input label="Hvilepuls (bpm)" type="number" value={hr} onChange={setHr} placeholder={`norm: ${profile?.normHr||50}`} />
+          <Input label="HRV (ms)" type="number" value={hrv} onChange={setHrv} placeholder={`norm: ${profile?.normHrv||65}`} />
           <Input label="Søvn (timer)" type="number" step="0.5" value={sleep} onChange={setSleep} placeholder="7.5" />
           <div>
-            <div style={{ fontSize: 11, color: C.muted, marginBottom: 4 }}>Dagsform (1–5)</div>
-            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-              {[1,2,3,4,5].map(n => (
-                <div key={n} onClick={() => setFeel(String(n))} style={{
-                  width: 36, height: 36, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", background: feel === String(n) ? C.accent + "44" : C.surface,
-                  border: `1px solid ${feel === String(n) ? C.accent : C.border}`, fontSize: 16, transition: "all .15s"
+            <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:6 }}>Dagsform</div>
+            <div style={{ display:"flex", gap:4 }}>
+              {[1,2,3,4,5].map(n=>(
+                <div key={n} onClick={()=>setFeel(String(n))} style={{
+                  flex:1, height:36, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center",
+                  cursor:"pointer", background:feel===String(n)?C.accent+"22":C.bg,
+                  border:`1.5px solid ${feel===String(n)?C.accent:C.border}`, fontSize:16
                 }}>{["😴","😕","😐","😊","🔥"][n-1]}</div>
               ))}
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 4 }}>
-          <Btn onClick={saveMorning} small color={C.green}>{saving ? "Lagret ✓" : "Lagre morgendata"}</Btn>
-          {score && <div style={{ fontSize: 13, color: score.color }}>Dagsform: <b>{score.score}</b> <span style={{ color: C.muted }}>({score.label})</span></div>}
-        </div>
+        <Btn onClick={saveMorning} small color={C.green} style={{ marginTop:4 }}>{saving?"Lagret ✓":"Lagre morgendata"}</Btn>
       </Card>
 
-      {/* Stats row */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 12 }}>
-        <Card style={{ padding: 14 }}><Stat label="Km siste 7d" value={recentKm.toFixed(1)} unit="km" /></Card>
-        <Card style={{ padding: 14 }}><Stat label="Hvilepuls" value={hr || "–"} unit="" color={C.yellow} /></Card>
-        <Card style={{ padding: 14 }}><Stat label="HRV" value={hrv || "–"} unit="ms" color={C.green} /></Card>
+      {/* Stats */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:10, marginBottom:12 }}>
+        <Card style={{ padding:12 }}><Stat label="Km/uke" value={recentKm.toFixed(0)} unit="km" /></Card>
+        <Card style={{ padding:12 }}><Stat label="Hvilepuls" value={hr||"–"} unit="" color={hrColor} /></Card>
+        <Card style={{ padding:12 }}><Stat label="HRV" value={hrv||"–"} unit="ms" color={C.green} /></Card>
       </div>
 
       {/* Analysis */}
-      <Card style={{ borderColor: C.accent + "33" }}>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>📊 DAGENS ANALYSE – NORWEGIAN METHOD</div>
-        {analysisParts.length > 0
-          ? analysisParts.map((part, i) => {
-              const isWarning = part.startsWith("⚠️") || part.startsWith("🔴") || part.startsWith("🚨");
-              const isGood = part.startsWith("✅") || part.startsWith("💚") || part.startsWith("🟢");
-              return (
-                <div key={i} style={{
-                  fontSize: 13, color: isWarning ? C.red : isGood ? C.green : C.text,
-                  lineHeight: 1.6, padding: "6px 0",
-                  borderBottom: i < analysisParts.length - 1 ? `1px solid ${C.border}` : "none",
-                  whiteSpace: "pre-line"
-                }}>{part}</div>
-              );
-            })
-          : <div style={{ fontSize: 13, color: C.muted }}>Legg inn morgendata for å få personlige anbefalinger.</div>
-        }
-      </Card>
-    </div>
-  );
-}
-
-// ─── PLAN TAB ────────────────────────────────────────────────────────────────
-function PlanTab({ plannedSessions, setPlannedSessions, sessions }) {
-  const [editDate, setEditDate] = useState(null);
-  const [editForm, setEditForm] = useState({});
-
-  const today = todayStr();
-  const dates = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  });
-
-  function openEdit(date) {
-    const dow = dayOfWeek(date);
-    const existing = plannedSessions[date] || PLANNED_SESSIONS[dow];
-    setEditForm({ ...existing });
-    setEditDate(date);
-  }
-
-  function saveEdit() {
-    setPlannedSessions(prev => ({ ...prev, [editDate]: { ...editForm } }));
-    setEditDate(null);
-  }
-
-  function deleteSession(date) {
-    setPlannedSessions(prev => { const n = { ...prev }; delete n[date]; return n; });
-  }
-
-  const intensityColor = { hard: C.red, medium: C.yellow, easy: C.green, rest: C.muted };
-
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 16 }}>Planlagte økter – 14 dager</h3>
-      {dates.map(date => {
-        const dow = dayOfWeek(date);
-        const plan = plannedSessions[date] || PLANNED_SESSIONS[dow];
-        const done = sessions.find(s => s.date === date);
-        const isToday = date === today;
-        return (
-          <Card key={date} style={{ marginBottom: 8, borderColor: isToday ? C.accent + "66" : C.border, background: isToday ? C.card : C.surface }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
-                  <span style={{ fontSize: 12, color: C.muted }}>{DAYS[dow]} {formatDate(date)}</span>
-                  {isToday && <Badge label="I DAG" color={C.accent} />}
-                  {done && <Badge label="✓ UTFØRT" color={C.green} />}
-                </div>
-                <div style={{ fontWeight: 700, color: plan ? intensityColor[plan.intensity] || C.text : C.muted }}>
-                  {plan?.label || "Ingen økt"}
-                </div>
-                <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{plan?.desc}</div>
-              </div>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                <Btn onClick={() => openEdit(date)} small color={C.accent}>✎</Btn>
-                {plannedSessions[date] && <Btn onClick={() => deleteSession(date)} small color={C.red}>✕</Btn>}
-              </div>
-            </div>
-          </Card>
-        );
-      })}
-
-      {/* Edit modal */}
-      {editDate && (
-        <div style={{ position: "fixed", inset: 0, background: "#000a", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <Card style={{ width: "100%", maxWidth: 400 }}>
-            <h3 style={{ color: C.accent, marginBottom: 12 }}>Rediger økt – {formatDate(editDate)}</h3>
-            <Input label="Navn på økt" value={editForm.label || ""} onChange={v => setEditForm(p => ({ ...p, label: v }))} />
-            <Input label="Emoji + navn" value={editForm.label || ""} onChange={v => setEditForm(p => ({ ...p, label: v }))} />
-            <Textarea label="Beskrivelse" value={editForm.desc || ""} onChange={v => setEditForm(p => ({ ...p, desc: v }))} rows={2} />
-            <Select label="Intensitet" value={editForm.intensity || "easy"} onChange={v => setEditForm(p => ({ ...p, intensity: v }))}
-              options={[{ value: "hard", label: "Hard 🔴" }, { value: "medium", label: "Medium 🟡" }, { value: "easy", label: "Lett 🟢" }, { value: "rest", label: "Hvile 😴" }]} />
-            <Select label="Type" value={editForm.type || "easy"} onChange={v => setEditForm(p => ({ ...p, type: v }))}
-              options={[{ value: "intervals", label: "Intervaller" }, { value: "easy", label: "Rolig jogging" }, { value: "long", label: "Langtur" }, { value: "strength", label: "Styrke" }, { value: "bike", label: "Sykkel" }, { value: "rest", label: "Hvile" }]} />
-            <div style={{ display: "flex", gap: 8 }}>
-              <Btn onClick={saveEdit} color={C.green}>Lagre</Btn>
-              <Btn onClick={() => setEditDate(null)} color={C.muted}>Avbryt</Btn>
-            </div>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── LOG TAB ─────────────────────────────────────────────────────────────────
-function LogTab({ sessions, setSessions }) {
-  const today = todayStr();
-  const [form, setForm] = useState({
-    date: today, type: "easy", km: "", totalTime: "", avgPace: "", avgHr: "", maxHr: "",
-    temp: "", humidity: "", notes: "", rpe: "5", intervals: [{ dist: "", pace: "", hr: "" }]
-  });
-  const [saved, setSaved] = useState(false);
-
-  function addInterval() { setForm(p => ({ ...p, intervals: [...p.intervals, { dist: "", pace: "", hr: "" }] })); }
-  function removeInterval(i) { setForm(p => ({ ...p, intervals: p.intervals.filter((_, idx) => idx !== i) })); }
-  function updateInterval(i, field, val) {
-    setForm(p => { const arr = [...p.intervals]; arr[i] = { ...arr[i], [field]: val }; return { ...p, intervals: arr }; });
-  }
-
-  function save() {
-    if (!form.date || !form.type) return;
-    setSessions(prev => {
-      const filtered = prev.filter(s => s.date !== form.date || s.id !== form.id);
-      return [...filtered, { ...form, id: Date.now() }].sort((a, b) => b.date.localeCompare(a.date));
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
-  }
-
-  const isInterval = form.type === "intervals";
-
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 16 }}>Loggfør økt</h3>
-      <Card>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
-          <div style={{ paddingRight: 8 }}>
-            <Input label="Dato" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} />
-          </div>
-          <Select label="Type økt" value={form.type} onChange={v => setForm(p => ({ ...p, type: v }))}
-            options={[{ value: "intervals", label: "🏃 Intervaller" }, { value: "easy", label: "🌿 Rolig jogging" }, { value: "long", label: "🏔️ Langtur" }, { value: "bike", label: "🚴 Sykkel" }, { value: "strength", label: "💪 Styrke" }, { value: "rest", label: "😴 Hvile" }]} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          <Input label="Distanse (km)" type="number" step="0.1" value={form.km} onChange={v => setForm(p => ({ ...p, km: v }))} />
-          <Input label="Total tid (min)" type="number" value={form.totalTime} onChange={v => setForm(p => ({ ...p, totalTime: v }))} />
-          <Input label="Snittempo (min/km)" value={form.avgPace} onChange={v => setForm(p => ({ ...p, avgPace: v }))} placeholder="4:30" />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Input label="Snittpuls (slag/min)" type="number" value={form.avgHr} onChange={v => setForm(p => ({ ...p, avgHr: v }))} />
-          <Input label="Makspuls (slag/min)" type="number" value={form.maxHr} onChange={v => setForm(p => ({ ...p, maxHr: v }))} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Input label="Temperatur (°C)" type="number" value={form.temp} onChange={v => setForm(p => ({ ...p, temp: v }))} />
-          <Input label="Luftfuktighet (%)" type="number" value={form.humidity} onChange={v => setForm(p => ({ ...p, humidity: v }))} />
-        </div>
-        <div style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>Opplevd anstrengelse (RPE 1–10)</div>
-          <div style={{ display: "flex", gap: 4 }}>
-            {[1,2,3,4,5,6,7,8,9,10].map(n => (
-              <div key={n} onClick={() => setForm(p => ({ ...p, rpe: String(n) }))} style={{
-                flex: 1, height: 28, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, transition: "all .1s",
-                background: form.rpe === String(n) ? (n <= 3 ? C.green : n <= 6 ? C.yellow : C.red) + "88" : C.surface,
-                border: `1px solid ${form.rpe === String(n) ? C.accent : C.border}`,
-                color: form.rpe === String(n) ? C.white : C.muted
-              }}>{n}</div>
-            ))}
-          </div>
-        </div>
-
-        {isInterval && (
-          <div>
-            <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>DRAG / INTERVALLER</div>
-            {form.intervals.map((iv, i) => (
-              <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-end" }}>
-                <Input label={`Drag ${i+1} dist`} value={iv.dist} onChange={v => updateInterval(i, "dist", v)} placeholder="km" style={{ marginBottom: 0 }} />
-                <Input label="Tempo" value={iv.pace} onChange={v => updateInterval(i, "pace", v)} placeholder="min/km" style={{ marginBottom: 0 }} />
-                <Input label="Puls" value={iv.hr} onChange={v => updateInterval(i, "hr", v)} placeholder="bpm" style={{ marginBottom: 0 }} />
-                <Btn onClick={() => removeInterval(i)} small color={C.red} style={{ marginBottom: 0 }}>✕</Btn>
-              </div>
-            ))}
-            <Btn onClick={addInterval} small color={C.accent} style={{ marginBottom: 12 }}>+ Legg til drag</Btn>
-          </div>
-        )}
-
-        <Textarea label="Notater / kommentar" value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} placeholder="Føltes bra, varm dag, litt stiv i startfasen..." />
-        <Btn onClick={save} color={C.green} style={{ width: "100%" }}>{saved ? "✓ Lagret!" : "Lagre økt"}</Btn>
-      </Card>
-    </div>
-  );
-}
-
-// ─── SESSION TYPE LABEL ───────────────────────────────────────────────────────
-function typeLabel(type) {
-  return type === "intervals" ? "🏃 Intervaller" : type === "easy" ? "🌿 Rolig jogging" : type === "long" ? "🏔️ Langtur" : type === "bike" ? "🚴 Sykkel" : type === "strength" ? "💪 Styrke" : "😴 Hvile";
-}
-
-// ─── SESSIONS HISTORY ────────────────────────────────────────────────────────
-function SessionsTab({ sessions, setSessions }) {
-  const [selected, setSelected] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState(null);
-  const [saved, setSaved] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-
-  function openSession(id) { setSelected(id); setEditing(false); setConfirmDelete(false); }
-  function closeSession() { setSelected(null); setEditing(false); setEditForm(null); setConfirmDelete(false); }
-
-  function startEdit(s) {
-    setEditForm({ ...s, intervals: s.intervals?.length ? s.intervals : [{ dist: "", pace: "", hr: "" }] });
-    setEditing(true);
-  }
-
-  function saveEdit() {
-    setSessions(prev => prev.map(s => s.id === editForm.id ? { ...editForm } : s).sort((a, b) => b.date.localeCompare(a.date)));
-    setSaved(true);
-    setTimeout(() => { setSaved(false); setEditing(false); }, 1000);
-  }
-
-  function deleteSession(id) {
-    setSessions(prev => prev.filter(s => s.id !== id));
-    closeSession();
-  }
-
-  function addInterval() { setEditForm(p => ({ ...p, intervals: [...(p.intervals || []), { dist: "", pace: "", hr: "" }] })); }
-  function removeInterval(i) { setEditForm(p => ({ ...p, intervals: p.intervals.filter((_, idx) => idx !== i) })); }
-  function updateInterval(i, field, val) {
-    setEditForm(p => { const arr = [...p.intervals]; arr[i] = { ...arr[i], [field]: val }; return { ...p, intervals: arr }; });
-  }
-
-  // ── Detail / Edit view ──
-  if (selected) {
-    const s = sessions.find(x => x.id === selected);
-    if (!s) { closeSession(); return null; }
-
-    if (editing && editForm) {
-      const isInterval = editForm.type === "intervals";
-      return (
-        <div>
-          <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "center" }}>
-            <Btn onClick={() => setEditing(false)} small color={C.muted}>← Avbryt</Btn>
-            <span style={{ color: C.accent, fontWeight: 700, fontSize: 15 }}>Rediger økt</span>
-          </div>
-          <Card>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <Input label="Dato" type="date" value={editForm.date} onChange={v => setEditForm(p => ({ ...p, date: v }))} />
-              <Select label="Type" value={editForm.type} onChange={v => setEditForm(p => ({ ...p, type: v }))}
-                options={[{ value:"intervals",label:"🏃 Intervaller"},{value:"easy",label:"🌿 Rolig"},{value:"long",label:"🏔️ Langtur"},{value:"bike",label:"🚴 Sykkel"},{value:"strength",label:"💪 Styrke"},{value:"rest",label:"😴 Hvile"}]} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-              <Input label="Distanse (km)" type="number" step="0.1" value={editForm.km} onChange={v => setEditForm(p => ({ ...p, km: v }))} />
-              <Input label="Tid (min)" type="number" value={editForm.totalTime} onChange={v => setEditForm(p => ({ ...p, totalTime: v }))} />
-              <Input label="Tempo (min/km)" value={editForm.avgPace} onChange={v => setEditForm(p => ({ ...p, avgPace: v }))} placeholder="4:30" />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-              <Input label="Snittpuls" type="number" value={editForm.avgHr} onChange={v => setEditForm(p => ({ ...p, avgHr: v }))} />
-              <Input label="Makspuls" type="number" value={editForm.maxHr} onChange={v => setEditForm(p => ({ ...p, maxHr: v }))} />
-              <Input label="Temperatur (°C)" type="number" value={editForm.temp} onChange={v => setEditForm(p => ({ ...p, temp: v }))} />
-              <Input label="Luftfuktighet (%)" type="number" value={editForm.humidity} onChange={v => setEditForm(p => ({ ...p, humidity: v }))} />
-            </div>
-            <div style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>RPE (1–10)</div>
-              <div style={{ display: "flex", gap: 4 }}>
-                {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                  <div key={n} onClick={() => setEditForm(p => ({ ...p, rpe: String(n) }))} style={{
-                    flex: 1, height: 28, borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 11, fontWeight: 700, transition: "all .1s",
-                    background: editForm.rpe === String(n) ? (n<=3?C.green:n<=6?C.yellow:C.red)+"88" : C.surface,
-                    border: `1px solid ${editForm.rpe === String(n) ? C.accent : C.border}`,
-                    color: editForm.rpe === String(n) ? C.white : C.muted
-                  }}>{n}</div>
-                ))}
-              </div>
-            </div>
-
-            {isInterval && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>DRAG / INTERVALLER</div>
-                {(editForm.intervals || []).map((iv, i) => (
-                  <div key={i} style={{ display: "flex", gap: 6, marginBottom: 6, alignItems: "flex-end" }}>
-                    <Input label={`Drag ${i+1} km`} value={iv.dist} onChange={v => updateInterval(i,"dist",v)} placeholder="km" style={{ marginBottom: 0 }} />
-                    <Input label="Tempo" value={iv.pace} onChange={v => updateInterval(i,"pace",v)} placeholder="min/km" style={{ marginBottom: 0 }} />
-                    <Input label="Puls" value={iv.hr} onChange={v => updateInterval(i,"hr",v)} placeholder="bpm" style={{ marginBottom: 0 }} />
-                    <Btn onClick={() => removeInterval(i)} small color={C.red} style={{ marginBottom: 0 }}>✕</Btn>
-                  </div>
-                ))}
-                <Btn onClick={addInterval} small color={C.accent} style={{ marginBottom: 8 }}>+ Legg til drag</Btn>
-              </div>
-            )}
-
-            <Textarea label="Notater / detaljer" value={editForm.notes} onChange={v => setEditForm(p => ({ ...p, notes: v }))}
-              rows={5} placeholder="Beskriv intervalløkten: hvordan føltes hvert drag, laktatnivå, form, vær, underlag..." />
-
-            <Btn onClick={saveEdit} color={C.green} style={{ width: "100%" }}>{saved ? "✓ Lagret!" : "Lagre endringer"}</Btn>
-          </Card>
-        </div>
-      );
-    }
-
-    // ── Detail view ──
-    return (
-      <div>
-        <Btn onClick={closeSession} small color={C.muted} style={{ marginBottom: 12 }}>← Tilbake</Btn>
-        <Card>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>{typeLabel(s.type)}</div>
-              <div style={{ color: C.muted, fontSize: 13 }}>{formatDate(s.date)}</div>
-              {s.stravaId && <div style={{ fontSize: 11, color: C.accent, marginTop: 2 }}>📡 Synkronisert fra Strava</div>}
-            </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <Btn onClick={() => startEdit(s)} small color={C.accent}>✎ Rediger</Btn>
-              {!confirmDelete
-                ? <Btn onClick={() => setConfirmDelete(true)} small color={C.red}>Slett</Btn>
-                : <Btn onClick={() => deleteSession(s.id)} small color={C.red}>Bekreft slett</Btn>}
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-            <Stat label="Distanse" value={s.km || "–"} unit="km" />
-            <Stat label="Tid" value={s.totalTime || "–"} unit="min" color={C.yellow} />
-            <Stat label="Tempo" value={s.avgPace || "–"} unit="" color={C.green} />
-            <Stat label="Snittpuls" value={s.avgHr || "–"} unit="bpm" color={C.red} />
-            <Stat label="Makspuls" value={s.maxHr || "–"} unit="bpm" color={C.orange} />
-            <Stat label="RPE" value={s.rpe || "–"} unit="/10" color={C.muted} />
-          </div>
-          {(s.temp || s.humidity) && (
-            <div style={{ display: "flex", gap: 16, marginBottom: 12, color: C.muted, fontSize: 13 }}>
-              {s.temp && <span>🌡 {s.temp}°C</span>}
-              {s.humidity && <span>💧 {s.humidity}% fuktighet</span>}
-            </div>
-          )}
-          {s.intervals && s.intervals.length > 0 && s.intervals[0].dist && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>DRAG</div>
-              {s.intervals.map((iv, i) => (
-                <div key={i} style={{ display: "flex", gap: 16, padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
-                  <span style={{ color: C.muted, minWidth: 50 }}>Drag {i+1}</span>
-                  <span>{iv.dist} km</span>
-                  <span style={{ color: C.accent }}>{iv.pace} min/km</span>
-                  <span style={{ color: C.red }}>{iv.hr} bpm</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {s.notes && (
-            <div style={{ background: C.surface, borderRadius: 8, padding: 12, fontSize: 13, color: C.text, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
-              {s.notes}
-            </div>
-          )}
-        </Card>
-      </div>
-    );
-  }
-
-  // ── List view ──
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 16 }}>Treningshistorikk</h3>
-      {sessions.length === 0
-        ? <div style={{ color: C.muted, textAlign: "center", padding: 40 }}>Ingen loggførte økter ennå</div>
-        : sessions.map(s => (
-          <Card key={s.id} style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => openSession(s.id)}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontWeight: 700 }}>{typeLabel(s.type)}</div>
-                <div style={{ fontSize: 12, color: C.muted }}>{formatDate(s.date)}{s.stravaId ? " · 📡 Strava" : ""}</div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ color: C.accent, fontWeight: 700 }}>{s.km ? `${s.km} km` : "–"}</div>
-                <div style={{ fontSize: 12, color: C.muted }}>{s.avgPace ? `${s.avgPace} min/km` : ""}</div>
-              </div>
-            </div>
-          </Card>
-        ))
-      }
-    </div>
-  );
-}
-
-// ─── GOALS TAB ───────────────────────────────────────────────────────────────
-function GoalsTab({ goals, setGoals, sessions }) {
-  const [form, setForm] = useState({ name: "", date: "", distanceKm: "", targetTime: "", notes: "" });
-  function addGoal() {
-    if (!form.name || !form.date) return;
-    setGoals(prev => [...prev, { ...form, id: Date.now() }]);
-    setForm({ name: "", date: "", distanceKm: "", targetTime: "", notes: "" });
-  }
-
-  function deleteGoal(id) { setGoals(prev => prev.filter(g => g.id !== id)); }
-
-  function targetPace(goal) {
-    if (!goal.distanceKm || !goal.targetTime) return null;
-    const [h, m, s] = (goal.targetTime.includes(":") ? goal.targetTime : `0:${goal.targetTime}:00`).split(":").map(Number);
-    const totalMin = (h || 0) * 60 + (m || 0) + (s || 0) / 60;
-    const pace = totalMin / parseFloat(goal.distanceKm);
-    const pMin = Math.floor(pace);
-    const pSec = Math.round((pace - pMin) * 60);
-    return `${pMin}:${String(pSec).padStart(2, "0")} min/km`;
-  }
-
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 16 }}>🎯 Treningsmål</h3>
-      <Card style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 10 }}>NYTT MÅL</div>
-        <Input label="Løp / arrangement" value={form.name} onChange={v => setForm(p => ({ ...p, name: v }))} placeholder="f.eks. Bergen City Marathon" />
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <Input label="Dato" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} />
-          <Input label="Distanse (km)" type="number" value={form.distanceKm} onChange={v => setForm(p => ({ ...p, distanceKm: v }))} placeholder="42.2" />
-        </div>
-        <Input label="Målid (t:mm:ss)" value={form.targetTime} onChange={v => setForm(p => ({ ...p, targetTime: v }))} placeholder="3:30:00" />
-        <Textarea label="Notater" value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} rows={2} />
-        <Btn onClick={addGoal} color={C.green}>Legg til mål</Btn>
-      </Card>
-
-      {goals.length === 0 && <div style={{ color: C.muted, textAlign: "center", padding: 30 }}>Ingen mål satt ennå</div>}
-
-      {goals.map(goal => (
-        <Card key={goal.id} style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>{goal.name}</div>
-              <div style={{ color: C.muted, fontSize: 13 }}>{formatDate(goal.date)} · {daysUntil(goal.date)} dager igjen</div>
-            </div>
-            <Btn onClick={() => deleteGoal(goal.id)} small color={C.red}>Slett</Btn>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-            <Stat label="Distanse" value={goal.distanceKm || "–"} unit="km" />
-            <Stat label="Målid" value={goal.targetTime || "–"} unit="" color={C.yellow} />
-            <Stat label="Mål-tempo" value={targetPace(goal) || "–"} unit="" color={C.green} />
-          </div>
-          {(() => {
-            const parts = analyzeGoalProgress({ goal, sessions }).split("\n\n").filter(Boolean);
-            return (
-              <div style={{ background: C.surface, borderRadius: 10, padding: 12 }}>
-                <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, marginBottom: 8 }}>📊 FORMANALYSE – NORWEGIAN METHOD</div>
-                {parts.map((p, i) => {
-                  const warn = p.startsWith("📉") || p.startsWith("⚠️") || p.startsWith("🚨");
-                  const good = p.startsWith("✅") || p.startsWith("🚀");
-                  return (
-                    <div key={i} style={{ fontSize: 13, color: warn ? C.red : good ? C.green : C.text, lineHeight: 1.6, padding: "4px 0", borderBottom: i < parts.length-1 ? `1px solid ${C.border}` : "none", whiteSpace: "pre-line" }}>{p}</div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-        </Card>
-      ))}
-    </div>
-  );
-}
-
-// ─── NUTRITION TAB ───────────────────────────────────────────────────────────
-function NutritionTab({ sessions }) {
-  const today = todayStr();
-  const dow = dayOfWeek(today);
-  const todayType = PLANNED_SESSIONS[dow]?.type || "easy";
-  const nut = NUTRITION[todayType] || NUTRITION.easy;
-  const nutAnalysis = analyzeNutrition({ todayType, sessions });
-  const nutParts = nutAnalysis.split("\n\n").filter(Boolean);
-
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 4 }}>🥗 Ernæring</h3>
-      <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Basert på dagens økt: <b style={{ color: C.text }}>{PLANNED_SESSIONS[dow]?.label}</b></div>
-
-      {[
-        { title: "🌅 Før økt", content: nut.before },
-        { title: "🏃 Under økt", content: nut.during },
-        { title: "✅ Etter økt", content: nut.after },
-        { title: "📅 Hele dagen", content: nut.general },
-      ].map(({ title, content }) => (
-        <Card key={title} style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 6 }}>{title}</div>
-          <div style={{ fontSize: 13, color: C.text, lineHeight: 1.6 }}>{content}</div>
-        </Card>
-      ))}
-
-      <Card style={{ marginBottom: 10, borderColor: C.accent + "33" }}>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>📊 DETALJERT PLAN FOR DAGENS ØKTTYPE</div>
-        {nutParts.map((part, i) => (
-          <div key={i} style={{ fontSize: 13, color: C.text, lineHeight: 1.6, padding: "6px 0", borderBottom: i < nutParts.length-1 ? `1px solid ${C.border}` : "none", whiteSpace: "pre-line" }}>{part}</div>
-        ))}
-      </Card>
-
-      <Card style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 12, color: C.yellow, fontWeight: 700, marginBottom: 8 }}>⚡ VIKTIGE NÆRINGSSTOFFER FOR LØPERE</div>
-        {[
-          { name: "Jern", tip: "Menn: 9mg/dag, Kvinner: 15mg/dag. Rødt kjøtt, linser, spinat + C-vitamin for opptak. Unngå kaffe/te til jernrike måltider." },
-          { name: "B12", tip: "2.4μg/dag. Kjøtt, fisk, egg, meieriprodukter. Sjekk nivå blodprøve 1x/år." },
-          { name: "D-vitamin", tip: "1000–2000 IU/dag (supplement anbefalt i Norge). Fet fisk, egg. Viktig for benhelse og immunforsvar." },
-          { name: "Magnesium", tip: "300–400mg/dag. Nøtter, mørk sjokolade, bananer. Reduserer kramper og støtter muskelfunksjon." },
-          { name: "Karbohydrater", tip: "Lett dag: 5–6g/kg. Hard dag: 7–10g/kg. Timing er nøkkelen: mest rundt treningsøkter." },
-          { name: "Protein", tip: "1.6–2.0g/kg/dag for løpere. Spredt på 4–5 måltider á 20–30g for optimal muskelprotein-syntese." },
-        ].map(({ name, tip }) => (
-          <div key={name} style={{ borderBottom: `1px solid ${C.border}`, padding: "8px 0" }}>
-            <div style={{ fontWeight: 700, color: C.text, fontSize: 13 }}>{name}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{tip}</div>
-          </div>
-        ))}
-      </Card>
-    </div>
-  );
-}
-
-// ─── RECOVERY TAB ────────────────────────────────────────────────────────────
-function RecoveryTab({ sessions, morningData }) {
-  const lastSession = sessions[0];
-  const rec = lastSession ? RECOVERY[lastSession.type] || RECOVERY.easy : null;
-
-  const hvData = Object.entries(morningData).sort(([a], [b]) => a.localeCompare(b)).slice(-7);
-  const recoveryAnalysis = analyzeRecovery({ lastSession, morningData });
-  const recoveryParts = recoveryAnalysis.split("\n\n").filter(Boolean);
-
-  return (
-    <div>
-      <h3 style={{ color: C.accent, marginBottom: 16 }}>💤 Restitusjon</h3>
-
-      {lastSession && rec && (
-        <Card style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>ETTER SISTE ØKT ({formatDate(lastSession.date)})</div>
-          <div style={{ color: C.yellow, fontWeight: 700, marginBottom: 8 }}>⏱ {rec.hours}</div>
-          {rec.tips.map(tip => <div key={tip} style={{ fontSize: 13, color: C.text, padding: "4px 0", borderBottom: `1px solid ${C.border}` }}>• {tip}</div>)}
-        </Card>
-      )}
-
-      {hvData.length > 0 && (
-        <Card style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 10 }}>HVILEEPULS SISTE 7 DAGER</div>
-          {hvData.map(([date, m]) => (
-            <div key={date} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
-              <span style={{ color: C.muted }}>{DAYS[dayOfWeek(date)]}</span>
-              <span>{m.hr ? `❤️ ${m.hr} bpm` : "–"}</span>
-              <span style={{ color: C.green }}>{m.hrv ? `HRV: ${m.hrv}ms` : "–"}</span>
-              <span>{m.sleep ? `😴 ${m.sleep}t` : "–"}</span>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: C.yellow, fontWeight: 700, marginBottom: 8 }}>THE NORWEGIAN METHOD – RESTITUSJONSPRINSIPPER</div>
-        {[
-          { t: "80/20-regelen", d: "80% av treningen skal være lett (sone 1–2). Kun 20% hard. Over-trening er den vanligste feilen." },
-          { t: "Dobbel terskel", d: "To terskeløkter/uke er max for de fleste. Trenger 36–48t restitusjon mellom harde økter." },
-          { t: "HRV-styrt trening", d: "HRV < normalverdi med 10%+: ta lett dag. HRV > normal: grønt lys for hard økt." },
-          { t: "Søvn er trening", d: "8–9 timer er optimalt for eliteløpere. Søvnunderskudd nullstiller treningsgevinst." },
-          { t: "Aktiv restitusjon", d: "Let sykkel, svømming eller gange akselererer restitusjonen uten å bryte ned." },
-        ].map(({ t, d }) => (
-          <div key={t} style={{ padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontWeight: 700, fontSize: 13, color: C.text }}>{t}</div>
-            <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{d}</div>
-          </div>
-        ))}
-      </Card>
-
-      <Card style={{ borderColor: C.accent + "33" }}>
-        <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>📊 PERSONLIG RESTITUSJONSANALYSE</div>
-        {recoveryParts.map((part, i) => {
-          const warn = part.startsWith("🔴") || part.startsWith("📉") || part.startsWith("😴");
-          const good = part.startsWith("🟢") || part.startsWith("📈");
-          return (
-            <div key={i} style={{ fontSize: 13, color: warn ? C.red : good ? C.green : C.text, lineHeight: 1.6, padding: "6px 0", borderBottom: i < recoveryParts.length-1 ? `1px solid ${C.border}` : "none", whiteSpace: "pre-line" }}>{part}</div>
-          );
+      <Card style={{ borderLeft:`4px solid ${C.accent}` }}>
+        <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:10 }}>📊 DAGENS ANALYSE – NORWEGIAN METHOD</div>
+        {analysisParts.map((part,i)=>{
+          const warn=part.startsWith("⚠️")||part.startsWith("🔴")||part.startsWith("🚨");
+          const good=part.startsWith("✅")||part.startsWith("💚")||part.startsWith("🟢");
+          return <div key={i} style={{ fontSize:13, color:warn?C.red:good?C.green:C.text, lineHeight:1.6, padding:"5px 0", borderBottom:i<analysisParts.length-1?`1px solid ${C.border}`:"none" }}>{part}</div>;
         })}
       </Card>
     </div>
   );
 }
 
-// ─── STRENGTH TAB ────────────────────────────────────────────────────────────
-const DEFAULT_EXERCISES = [
-  { id: "pullups", name: "Chins / Pull-ups", unit: "kg", icon: "🔝" },
-  { id: "squat", name: "Knebøy", unit: "kg", icon: "🏋️" },
-  { id: "deadlift", name: "Markløft", unit: "kg", icon: "⬆️" },
-  { id: "dips", name: "Dips", unit: "kg", icon: "💪" },
-];
-
-function StrengthTab({ strengthLog, setStrengthLog }) {
-  const [activeExercise, setActiveExercise] = useState("pullups");
-  const [view, setView] = useState("log"); // "log" | "history" | "add_exercise"
-  const [form, setForm] = useState({ date: todayStr(), sets: [{ reps: "", weight: "" }], notes: "" });
-  const [saved, setSaved] = useState(false);
-  const [exercises, setExercises] = useStore("nm_exercises", DEFAULT_EXERCISES);
-  const [newEx, setNewEx] = useState({ name: "", unit: "kg", icon: "🏋️" });
-
-  const ex = exercises.find(e => e.id === activeExercise) || exercises[0];
-  const exLog = (strengthLog[activeExercise] || []).sort((a, b) => b.date.localeCompare(a.date));
-
-  function addSet() { setForm(p => ({ ...p, sets: [...p.sets, { reps: "", weight: "" }] })); }
-  function removeSet(i) { setForm(p => ({ ...p, sets: p.sets.filter((_, idx) => idx !== i) })); }
-  function updateSet(i, field, val) {
-    setForm(p => { const s = [...p.sets]; s[i] = { ...s[i], [field]: val }; return { ...p, sets: s }; });
-  }
-
-  function saveSession() {
-    if (!form.sets.some(s => s.reps)) return;
-    const entry = { ...form, id: Date.now() };
-    setStrengthLog(prev => ({
-      ...prev,
-      [activeExercise]: [...(prev[activeExercise] || []), entry]
-    }));
-    setSaved(true);
-    setForm({ date: todayStr(), sets: [{ reps: "", weight: "" }], notes: "" });
-    setTimeout(() => setSaved(false), 1200);
-  }
-
-  function deleteEntry(id) {
-    setStrengthLog(prev => ({
-      ...prev,
-      [activeExercise]: (prev[activeExercise] || []).filter(e => e.id !== id)
-    }));
-  }
-
-  function addExercise() {
-    if (!newEx.name) return;
-    const id = newEx.name.toLowerCase().replace(/\s+/g, "_");
-    setExercises(prev => [...prev, { ...newEx, id }]);
-    setActiveExercise(id);
-    setNewEx({ name: "", unit: "kg", icon: "🏋️" });
-    setView("log");
-  }
-
-  // Beregn 1RM (Epley-formelen)
-  function oneRM(weight, reps) {
-    if (!weight || !reps || reps === 1) return parseFloat(weight) || 0;
-    return parseFloat(weight) * (1 + parseFloat(reps) / 30);
-  }
-
-  // Best set per økt (høyest 1RM)
-  function bestSet(session) {
-    if (!session.sets?.length) return null;
-    return session.sets.reduce((best, s) => {
-      const rm = oneRM(s.weight, s.reps);
-      return rm > oneRM(best.weight, best.reps) ? s : best;
-    }, session.sets[0]);
-  }
-
-  // Progress data for mini-chart
-  const chartData = [...exLog].reverse().slice(-12).map(s => {
-    const b = bestSet(s);
-    return { date: s.date, orm: b ? oneRM(b.weight, b.reps) : 0, weight: b?.weight || 0, reps: b?.reps || 0 };
+// ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
+function CalendarTab({ plannedSessions, setPlannedSessions, sessions }) {
+  const [viewMode, setViewMode] = useState("calendar"); // "calendar" | "list"
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const d=new Date(); return { year:d.getFullYear(), month:d.getMonth() };
   });
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [editingSessions, setEditingSessions] = useState([]); // sessions for selected date
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newSession, setNewSession] = useState({ type:"easy", label:"", desc:"", intensity:"easy" });
+  const today = todayStr();
 
-  const allTimeMax = chartData.reduce((m, d) => Math.max(m, d.orm), 0);
-  const latestOrm = chartData[chartData.length - 1]?.orm || 0;
-  const prevOrm = chartData[chartData.length - 2]?.orm || 0;
-  const trend = latestOrm - prevOrm;
+  function dateStr(year, month, day) {
+    return `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  }
+
+  function getSessionsForDate(date) {
+    const dow = dayOfWeek(date);
+    return plannedSessions[date] !== undefined ? plannedSessions[date] : (DEFAULT_WEEKLY[dow] || []);
+  }
+
+  function getDoneSessionsForDate(date) {
+    return sessions.filter(s => s.date === date);
+  }
+
+  function openDate(date) {
+    setSelectedDate(date);
+    setEditingSessions([...getSessionsForDate(date)]);
+    setShowAddForm(false);
+  }
+
+  function saveDate() {
+    setPlannedSessions(prev => ({ ...prev, [selectedDate]: editingSessions }));
+    setSelectedDate(null);
+  }
+
+  function removeSession(i) {
+    setEditingSessions(prev => prev.filter((_,idx)=>idx!==i));
+  }
+
+  function addSession() {
+    const label = newSession.label || typeLabel(newSession.type);
+    setEditingSessions(prev => [...prev, { ...newSession, label }]);
+    setNewSession({ type:"easy", label:"", desc:"", intensity:"easy" });
+    setShowAddForm(false);
+  }
+
+  // Build calendar grid
+  const { year, month } = currentMonth;
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const prevMonth = () => setCurrentMonth(p => p.month===0?{year:p.year-1,month:11}:{...p,month:p.month-1});
+  const nextMonth = () => setCurrentMonth(p => p.month===11?{year:p.year+1,month:0}:{...p,month:p.month+1});
+
+  // LIST VIEW – next 60 days
+  if (viewMode === "list") {
+    const dates = Array.from({length:60},(_,i)=>{ const d=new Date(); d.setDate(d.getDate()+i); return dateStr(d.getFullYear(),d.getMonth(),d.getDate()); });
+    return (
+      <div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+          <h3 style={{ color:C.text, fontWeight:800 }}>Treningsplan</h3>
+          <div style={{ display:"flex", gap:6 }}>
+            <Btn onClick={()=>setViewMode("calendar")} small color={C.accent} outline>📅 Kalender</Btn>
+            <Btn onClick={()=>setViewMode("list")} small color={C.accent}>☰ Liste</Btn>
+          </div>
+        </div>
+        {dates.map(date=>{
+          const dow=dayOfWeek(date);
+          const plans=getSessionsForDate(date);
+          const done=getDoneSessionsForDate(date);
+          const isToday=date===today;
+          if (plans.length===0&&done.length===0&&!isToday) return null;
+          return (
+            <Card key={date} style={{ marginBottom:8, borderLeft:`3px solid ${isToday?C.accent:C.border}` }} onClick={()=>openDate(date)}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ display:"flex", gap:6, alignItems:"center", marginBottom:4 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color:isToday?C.accent:C.muted }}>{DAYS[dow]} {formatDate(date)}</span>
+                    {isToday&&<Badge label="I DAG" color={C.accent}/>}
+                  </div>
+                  {plans.map((p,i)=>(
+                    <div key={i} style={{ fontSize:13, fontWeight:600, color:intensityColor(p.intensity), marginBottom:2 }}>{p.label}</div>
+                  ))}
+                  {done.map((s,i)=>(
+                    <div key={i} style={{ fontSize:12, color:C.green }}>✓ {typeLabel(s.type)} {s.km?`· ${s.km}km`:""}</div>
+                  ))}
+                </div>
+                <span style={{ color:C.muted, fontSize:18 }}>›</span>
+              </div>
+            </Card>
+          );
+        })}
+        {selectedDate && renderEditModal()}
+      </div>
+    );
+  }
+
+  // CALENDAR VIEW
+  function renderEditModal() {
+    return (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:200, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+        <div style={{ background:C.surface, borderRadius:"20px 20px 0 0", padding:20, width:"100%", maxWidth:520, maxHeight:"80vh", overflowY:"auto" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div>
+              <div style={{ fontWeight:800, fontSize:16, color:C.text }}>{DAYS[dayOfWeek(selectedDate)]}</div>
+              <div style={{ fontSize:13, color:C.muted }}>{formatDate(selectedDate)}</div>
+            </div>
+            <Btn onClick={()=>setSelectedDate(null)} small color={C.muted}>✕</Btn>
+          </div>
+
+          {/* Done sessions */}
+          {getDoneSessionsForDate(selectedDate).length>0&&(
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:C.green, fontWeight:700, marginBottom:6 }}>GJENNOMFØRT</div>
+              {getDoneSessionsForDate(selectedDate).map((s,i)=>(
+                <div key={i} style={{ background:C.greenLight, borderRadius:8, padding:"6px 10px", marginBottom:4, fontSize:13, color:C.green, fontWeight:600 }}>
+                  ✓ {typeLabel(s.type)} {s.km?`· ${s.km}km`:""} {s.avgPace?`· ${s.avgPace}/km`:""}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Planned sessions */}
+          <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:6 }}>PLANLAGTE ØKTER</div>
+          {editingSessions.length===0&&<div style={{ color:C.muted, fontSize:13, marginBottom:8 }}>Ingen økt planlagt</div>}
+          {editingSessions.map((s,i)=>(
+            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:C.bg, borderRadius:8, padding:"8px 10px", marginBottom:6 }}>
+              <div>
+                <div style={{ fontWeight:700, color:intensityColor(s.intensity), fontSize:13 }}>{s.label}</div>
+                <div style={{ fontSize:12, color:C.muted }}>{s.desc}</div>
+              </div>
+              <Btn onClick={()=>removeSession(i)} small color={C.red}>✕</Btn>
+            </div>
+          ))}
+
+          {showAddForm?(
+            <div style={{ background:C.bg, borderRadius:12, padding:12, marginBottom:12 }}>
+              <Select label="Type" value={newSession.type} onChange={v=>setNewSession(p=>({...p,type:v,label:typeLabel(v)}))}
+                options={[{value:"intervals",label:"🏃 Intervaller"},{value:"easy",label:"🌿 Rolig jogging"},{value:"long",label:"🏔️ Langtur"},{value:"bike",label:"🚴 Sykkel"},{value:"strength",label:"💪 Styrke"},{value:"rest",label:"😴 Hvile"}]} />
+              <Input label="Navn (valgfritt)" value={newSession.label} onChange={v=>setNewSession(p=>({...p,label:v}))} placeholder={typeLabel(newSession.type)} />
+              <Input label="Beskrivelse" value={newSession.desc} onChange={v=>setNewSession(p=>({...p,desc:v}))} placeholder="f.eks. 5x6 min terskel" />
+              <Select label="Intensitet" value={newSession.intensity} onChange={v=>setNewSession(p=>({...p,intensity:v}))}
+                options={[{value:"hard",label:"Hard 🔴"},{value:"medium",label:"Medium 🟡"},{value:"easy",label:"Lett 🟢"},{value:"rest",label:"Hvile ⚪"}]} />
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn onClick={addSession} small color={C.green}>Legg til</Btn>
+                <Btn onClick={()=>setShowAddForm(false)} small color={C.muted}>Avbryt</Btn>
+              </div>
+            </div>
+          ):(
+            <Btn onClick={()=>setShowAddForm(true)} small color={C.accent} style={{ marginBottom:12 }}>+ Legg til økt</Btn>
+          )}
+
+          <Btn onClick={saveDate} color={C.accent} style={{ width:"100%" }}>Lagre</Btn>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
-      <h3 style={{ color: C.accent, marginBottom: 12 }}>💪 Styrketrening</h3>
-
-      {/* Exercise selector */}
-      <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 12 }}>
-        {exercises.map(e => (
-          <div key={e.id} onClick={() => { setActiveExercise(e.id); setView("log"); }}
-            style={{
-              flexShrink: 0, padding: "6px 14px", borderRadius: 20, cursor: "pointer",
-              background: activeExercise === e.id ? C.accent + "33" : C.surface,
-              border: `1px solid ${activeExercise === e.id ? C.accent : C.border}`,
-              color: activeExercise === e.id ? C.accent : C.muted,
-              fontSize: 13, fontWeight: activeExercise === e.id ? 700 : 400,
-              whiteSpace: "nowrap", transition: "all .15s"
-            }}>
-            {e.icon} {e.name}
-          </div>
-        ))}
-        <div onClick={() => setView("add_exercise")}
-          style={{ flexShrink: 0, padding: "6px 14px", borderRadius: 20, cursor: "pointer", background: C.surface, border: `1px dashed ${C.border}`, color: C.muted, fontSize: 13, whiteSpace: "nowrap" }}>
-          + Ny øvelse
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+        <h3 style={{ color:C.text, fontWeight:800 }}>Treningsplan</h3>
+        <div style={{ display:"flex", gap:6 }}>
+          <Btn onClick={()=>setViewMode("calendar")} small color={C.accent}>📅 Kalender</Btn>
+          <Btn onClick={()=>setViewMode("list")} small color={C.accent} outline>☰ Liste</Btn>
         </div>
       </div>
 
-      {/* Add exercise form */}
-      {view === "add_exercise" && (
-        <Card style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 10 }}>NY ØVELSE</div>
-          <Input label="Navn" value={newEx.name} onChange={v => setNewEx(p => ({ ...p, name: v }))} placeholder="f.eks. Benkpress" />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <Select label="Enhet" value={newEx.unit} onChange={v => setNewEx(p => ({ ...p, unit: v }))}
-              options={[{ value: "kg", label: "kg" }, { value: "reps", label: "kun reps" }]} />
-            <Input label="Emoji" value={newEx.icon} onChange={v => setNewEx(p => ({ ...p, icon: v }))} placeholder="🏋️" />
+      {/* Month navigation */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <Btn onClick={prevMonth} small color={C.muted}>‹</Btn>
+        <div style={{ fontWeight:700, fontSize:16, color:C.text }}>{MONTHS[month]} {year}</div>
+        <Btn onClick={nextMonth} small color={C.muted}>›</Btn>
+      </div>
+
+      {/* Weekday headers */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:4 }}>
+        {DAYS_SHORT.map(d=>(
+          <div key={d} style={{ textAlign:"center", fontSize:11, color:C.muted, fontWeight:700, padding:"4px 0" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2 }}>
+        {Array.from({length:firstDay}).map((_,i)=><div key={`e${i}`}/>)}
+        {Array.from({length:daysInMonth},(_,i)=>{
+          const day=i+1;
+          const date=dateStr(year,month,day);
+          const plans=getSessionsForDate(date);
+          const done=getDoneSessionsForDate(date);
+          const isToday=date===today;
+          const isPast=date<today;
+          return (
+            <div key={day} onClick={()=>openDate(date)} style={{
+              minHeight:56, borderRadius:10, padding:"4px 5px", cursor:"pointer",
+              background:isToday?C.accent+"18":C.surface,
+              border:`1.5px solid ${isToday?C.accent:C.border}`,
+              transition:"all .1s"
+            }}
+              onMouseEnter={e=>e.currentTarget.style.background=isToday?C.accent+"28":"#f8fafc"}
+              onMouseLeave={e=>e.currentTarget.style.background=isToday?C.accent+"18":C.surface}
+            >
+              <div style={{ fontSize:12, fontWeight:isToday?800:500, color:isToday?C.accent:isPast?C.muted:C.text, marginBottom:2 }}>{day}</div>
+              {plans.slice(0,2).map((p,i)=>(
+                <div key={i} style={{ fontSize:9, borderRadius:3, padding:"1px 3px", marginBottom:1, background:intensityColor(p.intensity)+"22", color:intensityColor(p.intensity), fontWeight:700, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
+                  {p.label.replace(/[^\x00-\x7F]/g,"")||p.type}
+                </div>
+              ))}
+              {done.length>0&&<div style={{ fontSize:9, color:C.green, fontWeight:700 }}>✓×{done.length}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display:"flex", gap:12, marginTop:12, flexWrap:"wrap" }}>
+        {[{color:C.red,label:"Hard"},{color:C.yellow,label:"Medium"},{color:C.green,label:"Lett/Gjennomført"}].map(({color,label})=>(
+          <div key={label} style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:C.muted }}>
+            <div style={{ width:10, height:10, borderRadius:2, background:color+"44", border:`1px solid ${color}` }}/>
+            {label}
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn onClick={addExercise} color={C.green}>Legg til</Btn>
-            <Btn onClick={() => setView("log")} small color={C.muted}>Avbryt</Btn>
+        ))}
+      </div>
+
+      {selectedDate && renderEditModal()}
+    </div>
+  );
+}
+
+// ─── LOG TAB ──────────────────────────────────────────────────────────────────
+function LogTab({ sessions, setSessions }) {
+  const today=todayStr();
+  const [form,setForm]=useState({ date:today, type:"easy", km:"", totalTime:"", avgPace:"", avgHr:"", maxHr:"", temp:"", humidity:"", notes:"", rpe:"5", intervals:[{dist:"",pace:"",hr:""}] });
+  const [saved,setSaved]=useState(false);
+
+  function addInterval(){ setForm(p=>({...p,intervals:[...p.intervals,{dist:"",pace:"",hr:""}]})); }
+  function removeInterval(i){ setForm(p=>({...p,intervals:p.intervals.filter((_,idx)=>idx!==i)})); }
+  function updateInterval(i,field,val){ setForm(p=>{ const a=[...p.intervals]; a[i]={...a[i],[field]:val}; return {...p,intervals:a}; }); }
+
+  function save() {
+    if (!form.date||!form.type) return;
+    setSessions(prev=>[...prev.filter(s=>!(s.date===form.date&&s.id===form.id)),{...form,id:Date.now()}].sort((a,b)=>b.date.localeCompare(a.date)));
+    setSaved(true);
+    setForm({ date:today, type:"easy", km:"", totalTime:"", avgPace:"", avgHr:"", maxHr:"", temp:"", humidity:"", notes:"", rpe:"5", intervals:[{dist:"",pace:"",hr:""}] });
+    setTimeout(()=>setSaved(false),2000);
+  }
+
+  return (
+    <div>
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>Loggfør økt</h3>
+      <Card>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
+          <Select label="Type" value={form.type} onChange={v=>setForm(p=>({...p,type:v}))}
+            options={[{value:"intervals",label:"🏃 Intervaller"},{value:"easy",label:"🌿 Rolig"},{value:"long",label:"🏔️ Langtur"},{value:"bike",label:"🚴 Sykkel"},{value:"strength",label:"💪 Styrke"},{value:"rest",label:"😴 Hvile"}]} />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+          <Input label="Distanse (km)" type="number" step="0.1" value={form.km} onChange={v=>setForm(p=>({...p,km:v}))} />
+          <Input label="Tid (min)" type="number" value={form.totalTime} onChange={v=>setForm(p=>({...p,totalTime:v}))} />
+          <Input label="Tempo (min/km)" value={form.avgPace} onChange={v=>setForm(p=>({...p,avgPace:v}))} placeholder="4:30" />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8 }}>
+          <Input label="Snittpuls" type="number" value={form.avgHr} onChange={v=>setForm(p=>({...p,avgHr:v}))} />
+          <Input label="Makspuls" type="number" value={form.maxHr} onChange={v=>setForm(p=>({...p,maxHr:v}))} />
+          <Input label="Temp °C" type="number" value={form.temp} onChange={v=>setForm(p=>({...p,temp:v}))} />
+          <Input label="Fukt %" type="number" value={form.humidity} onChange={v=>setForm(p=>({...p,humidity:v}))} />
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:6 }}>RPE (1–10)</div>
+          <div style={{ display:"flex", gap:3 }}>
+            {[1,2,3,4,5,6,7,8,9,10].map(n=>(
+              <div key={n} onClick={()=>setForm(p=>({...p,rpe:String(n)}))} style={{
+                flex:1, height:30, borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:11, fontWeight:700, transition:"all .1s",
+                background:form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red)+"33":C.bg,
+                border:`1.5px solid ${form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red):C.border}`,
+                color:form.rpe===String(n)?(n<=3?C.green:n<=6?C.yellow:C.red):C.muted
+              }}>{n}</div>
+            ))}
+          </div>
+        </div>
+        {form.type==="intervals"&&(
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>DRAG</div>
+            {form.intervals.map((iv,i)=>(
+              <div key={i} style={{ display:"flex", gap:6, marginBottom:6, alignItems:"flex-end" }}>
+                <Input label={i===0?"Dist (km)":""} value={iv.dist} onChange={v=>updateInterval(i,"dist",v)} placeholder="km" style={{ marginBottom:0 }} />
+                <Input label={i===0?"Tempo":""}  value={iv.pace} onChange={v=>updateInterval(i,"pace",v)} placeholder="4:30" style={{ marginBottom:0 }} />
+                <Input label={i===0?"Puls":""} value={iv.hr} onChange={v=>updateInterval(i,"hr",v)} placeholder="bpm" style={{ marginBottom:0 }} />
+                {form.intervals.length>1&&<Btn onClick={()=>removeInterval(i)} small color={C.red} style={{ marginBottom:0 }}>✕</Btn>}
+              </div>
+            ))}
+            <Btn onClick={addInterval} small color={C.accent}>+ Drag</Btn>
+          </div>
+        )}
+        <Textarea label="Notater" value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} rows={3} placeholder="Hvordan føltes det? Teknikk, vær, form..." />
+        <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre økt"}</Btn>
+      </Card>
+
+      {/* Recent sessions */}
+      {sessions.length>0&&(
+        <div style={{ marginTop:20 }}>
+          <div style={{ fontSize:12, color:C.muted, fontWeight:700, marginBottom:10 }}>SISTE ØKTER</div>
+          {sessions.slice(0,5).map(s=>(
+            <Card key={s.id} style={{ marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:13 }}>{typeLabel(s.type)}</div>
+                  <div style={{ fontSize:12, color:C.muted }}>{formatDate(s.date)}</div>
+                </div>
+                <div style={{ textAlign:"right" }}>
+                  <div style={{ color:C.accent, fontWeight:700 }}>{s.km?`${s.km}km`:"–"}</div>
+                  <div style={{ fontSize:12, color:C.muted }}>{s.avgPace?`${s.avgPace}/km`:""}</div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── STRENGTH TAB ─────────────────────────────────────────────────────────────
+const DEFAULT_EXERCISES=[
+  {id:"pullups",name:"Chins / Pull-ups",unit:"kg",icon:"🔝"},
+  {id:"squat",name:"Knebøy",unit:"kg",icon:"🏋️"},
+  {id:"deadlift",name:"Markløft",unit:"kg",icon:"⬆️"},
+  {id:"dips",name:"Dips",unit:"kg",icon:"💪"},
+];
+
+function StrengthTab({ strengthLog, setStrengthLog }) {
+  const [active,setActive]=useState("pullups");
+  const [view,setView]=useState("log");
+  const [form,setForm]=useState({ date:todayStr(), sets:[{reps:"",weight:""}], notes:"" });
+  const [saved,setSaved]=useState(false);
+  const [exercises,setExercises]=useStore("nm_exercises",DEFAULT_EXERCISES);
+  const [newEx,setNewEx]=useState({name:"",unit:"kg",icon:"🏋️"});
+  const [showNewEx,setShowNewEx]=useState(false);
+
+  const ex=exercises.find(e=>e.id===active)||exercises[0];
+  const exLog=(strengthLog[active]||[]).sort((a,b)=>b.date.localeCompare(a.date));
+
+  function oneRM(w,r){ if(!w||!r||r===1) return parseFloat(w)||0; return parseFloat(w)*(1+parseFloat(r)/30); }
+  function bestSet(s){ return s.sets?.reduce((b,x)=>oneRM(x.weight,x.reps)>oneRM(b.weight,b.reps)?x:b,s.sets[0]); }
+
+  const chartData=[...exLog].reverse().slice(-12).map(s=>{ const b=bestSet(s); return {date:s.date,orm:b?oneRM(b.weight,b.reps):0}; });
+  const maxOrm=chartData.reduce((m,d)=>Math.max(m,d.orm),0);
+  const latestOrm=chartData[chartData.length-1]?.orm||0;
+  const prevOrm=chartData[chartData.length-2]?.orm||0;
+
+  function save(){
+    if(!form.sets.some(s=>s.reps)) return;
+    setStrengthLog(prev=>({...prev,[active]:[...(prev[active]||[]),{...form,id:Date.now()}]}));
+    setSaved(true);
+    setForm({date:todayStr(),sets:[{reps:"",weight:""}],notes:""});
+    setTimeout(()=>setSaved(false),1200);
+  }
+
+  return (
+    <div>
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:12 }}>💪 Styrketrening</h3>
+      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:8, marginBottom:12 }}>
+        {exercises.map(e=>(
+          <div key={e.id} onClick={()=>{ setActive(e.id); setView("log"); }} style={{
+            flexShrink:0, padding:"6px 14px", borderRadius:20, cursor:"pointer",
+            background:active===e.id?C.accent+"18":C.surface,
+            border:`1.5px solid ${active===e.id?C.accent:C.border}`,
+            color:active===e.id?C.accent:C.muted, fontSize:13, fontWeight:active===e.id?700:400, whiteSpace:"nowrap"
+          }}>{e.icon} {e.name}</div>
+        ))}
+        <div onClick={()=>setShowNewEx(true)} style={{ flexShrink:0, padding:"6px 14px", borderRadius:20, cursor:"pointer", background:C.surface, border:`1.5px dashed ${C.border}`, color:C.muted, fontSize:13, whiteSpace:"nowrap" }}>+ Ny</div>
+      </div>
+
+      {showNewEx&&(
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ fontSize:12, color:C.accent, fontWeight:700, marginBottom:8 }}>NY ØVELSE</div>
+          <Input label="Navn" value={newEx.name} onChange={v=>setNewEx(p=>({...p,name:v}))} />
+          <div style={{ display:"flex", gap:8 }}>
+            <Btn onClick={()=>{ const id=newEx.name.toLowerCase().replace(/\s+/g,"_"); setExercises(p=>[...p,{...newEx,id}]); setActive(id); setShowNewEx(false); setNewEx({name:"",unit:"kg",icon:"🏋️"}); }} small color={C.green}>Legg til</Btn>
+            <Btn onClick={()=>setShowNewEx(false)} small color={C.muted}>Avbryt</Btn>
           </div>
         </Card>
       )}
 
-      {/* Stats bar */}
-      {chartData.length > 0 && (
-        <Card style={{ marginBottom: 12 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
-            <Stat label="Siste 1RM" value={latestOrm.toFixed(1)} unit="kg" color={C.accent} />
-            <Stat label="All-time best" value={allTimeMax.toFixed(1)} unit="kg" color={C.yellow} />
-            <Stat label="Trend" value={trend >= 0 ? `+${trend.toFixed(1)}` : trend.toFixed(1)} unit="kg"
-              color={trend >= 0 ? C.green : C.red} />
+      {chartData.length>0&&(
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:chartData.length>=2?12:0 }}>
+            <Stat label="Siste 1RM" value={latestOrm.toFixed(1)} unit="kg" />
+            <Stat label="All-time" value={maxOrm.toFixed(1)} unit="kg" color={C.yellow} />
+            <Stat label="Trend" value={(latestOrm-prevOrm>=0?"+":"")+(latestOrm-prevOrm).toFixed(1)} unit="kg" color={latestOrm>=prevOrm?C.green:C.red} />
           </div>
-
-          {/* Mini progress chart */}
-          {chartData.length >= 2 && (
+          {chartData.length>=2&&(
             <div>
-              <div style={{ fontSize: 11, color: C.muted, marginBottom: 6 }}>1RM-UTVIKLING (estimert)</div>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 3, height: 60 }}>
-                {chartData.map((d, i) => {
-                  const pct = allTimeMax > 0 ? (d.orm / allTimeMax) * 100 : 0;
-                  const isLast = i === chartData.length - 1;
-                  return (
-                    <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                      <div style={{
-                        width: "100%", height: `${Math.max(pct, 8)}%`, borderRadius: "3px 3px 0 0",
-                        background: isLast ? C.accent : C.accent + "55",
-                        minHeight: 4, transition: "height .3s"
-                      }} />
-                      <div style={{ fontSize: 8, color: C.muted, transform: "rotate(-45deg)", whiteSpace: "nowrap" }}>
-                        {d.date.slice(5)}
-                      </div>
-                    </div>
-                  );
+              <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>1RM-UTVIKLING</div>
+              <div style={{ display:"flex", alignItems:"flex-end", gap:3, height:50 }}>
+                {chartData.map((d,i)=>{ const pct=maxOrm>0?(d.orm/maxOrm)*100:0; const isLast=i===chartData.length-1;
+                  return <div key={i} style={{ flex:1, height:`${Math.max(pct,8)}%`, borderRadius:"3px 3px 0 0", background:isLast?C.accent:C.accent+"44", minHeight:4 }}/>;
                 })}
               </div>
             </div>
@@ -1237,280 +749,133 @@ function StrengthTab({ strengthLog, setStrengthLog }) {
         </Card>
       )}
 
-      {/* View toggle */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        <Btn onClick={() => setView("log")} small color={view === "log" ? C.accent : C.muted}>+ Loggfør</Btn>
-        <Btn onClick={() => setView("history")} small color={view === "history" ? C.accent : C.muted}>📖 Historikk</Btn>
+      <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+        <Btn onClick={()=>setView("log")} small color={view==="log"?C.accent:C.muted} outline={view!=="log"}>+ Loggfør</Btn>
+        <Btn onClick={()=>setView("history")} small color={view==="history"?C.accent:C.muted} outline={view!=="history"}>📖 Historikk</Btn>
       </div>
 
-      {/* Log form */}
-      {view === "log" && (
+      {view==="log"&&(
         <Card>
-          <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 10 }}>
-            {ex?.icon} LOGGFØR {ex?.name?.toUpperCase()}
-          </div>
-          <Input label="Dato" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))} />
-
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>SETT</div>
-          {form.sets.map((s, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-end" }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: C.accent + "22", color: C.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0, marginBottom: 2 }}>{i + 1}</div>
-              {ex?.unit === "kg" && (
-                <Input label={i === 0 ? "Vekt (kg)" : ""} type="number" step="0.5" value={s.weight}
-                  onChange={v => updateSet(i, "weight", v)} placeholder="kg" style={{ marginBottom: 0 }} />
-              )}
-              <Input label={i === 0 ? "Reps" : ""} type="number" value={s.reps}
-                onChange={v => updateSet(i, "reps", v)} placeholder="reps" style={{ marginBottom: 0 }} />
-              {ex?.unit === "kg" && s.weight && s.reps && (
-                <div style={{ fontSize: 11, color: C.muted, whiteSpace: "nowrap", paddingBottom: 10 }}>
-                  ~{oneRM(s.weight, s.reps).toFixed(1)}kg 1RM
-                </div>
-              )}
-              {form.sets.length > 1 && (
-                <Btn onClick={() => removeSet(i)} small color={C.red} style={{ marginBottom: 0 }}>✕</Btn>
-              )}
+          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
+          <div style={{ fontSize:11, color:C.muted, fontWeight:600, marginBottom:8 }}>SETT</div>
+          {form.sets.map((s,i)=>(
+            <div key={i} style={{ display:"flex", gap:8, marginBottom:8, alignItems:"flex-end" }}>
+              <div style={{ width:24, height:24, borderRadius:"50%", background:C.accent+"22", color:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0, marginBottom:2 }}>{i+1}</div>
+              <Input label={i===0?"Vekt (kg)":""} type="number" step="0.5" value={s.weight} onChange={v=>{ const a=[...form.sets]; a[i]={...a[i],weight:v}; setForm(p=>({...p,sets:a})); }} placeholder="kg" style={{ marginBottom:0 }} />
+              <Input label={i===0?"Reps":""} type="number" value={s.reps} onChange={v=>{ const a=[...form.sets]; a[i]={...a[i],reps:v}; setForm(p=>({...p,sets:a})); }} placeholder="reps" style={{ marginBottom:0 }} />
+              {s.weight&&s.reps&&<div style={{ fontSize:11, color:C.muted, whiteSpace:"nowrap", paddingBottom:10 }}>~{oneRM(s.weight,s.reps).toFixed(1)}kg</div>}
+              {form.sets.length>1&&<Btn onClick={()=>setForm(p=>({...p,sets:p.sets.filter((_,idx)=>idx!==i)}))} small color={C.red} style={{ marginBottom:0 }}>✕</Btn>}
             </div>
           ))}
-          <Btn onClick={addSet} small color={C.accent} style={{ marginBottom: 12 }}>+ Legg til sett</Btn>
-          <Textarea label="Notater" value={form.notes} onChange={v => setForm(p => ({ ...p, notes: v }))} rows={2}
-            placeholder="Kommentar til økten, teknikk, dagsform..." />
-          <Btn onClick={saveSession} color={C.green} style={{ width: "100%" }}>
-            {saved ? "✓ Lagret!" : "Lagre økt"}
-          </Btn>
+          <Btn onClick={()=>setForm(p=>({...p,sets:[...p.sets,{reps:"",weight:""}]}))} small color={C.accent} style={{ marginBottom:12 }}>+ Sett</Btn>
+          <Textarea label="Notater" value={form.notes} onChange={v=>setForm(p=>({...p,notes:v}))} rows={2} placeholder="Teknikk, dagsform..." />
+          <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre økt"}</Btn>
         </Card>
       )}
 
-      {/* History */}
-      {view === "history" && (
+      {view==="history"&&(
         <div>
-          {exLog.length === 0
-            ? <div style={{ color: C.muted, textAlign: "center", padding: 30 }}>Ingen loggede {ex?.name}-økter ennå</div>
-            : exLog.map(entry => {
-              const best = bestSet(entry);
-              return (
-                <Card key={entry.id} style={{ marginBottom: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontSize: 13, color: C.muted }}>{formatDate(entry.date)}</div>
-                      <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>
-                        {entry.sets.length} sett
-                        {best && ex?.unit === "kg" && <span style={{ color: C.accent }}> · Beste: {best.weight}kg × {best.reps} (~{oneRM(best.weight, best.reps).toFixed(1)}kg 1RM)</span>}
-                      </div>
-                    </div>
-                    <Btn onClick={() => deleteEntry(entry.id)} small color={C.red}>Slett</Btn>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {entry.sets.map((s, i) => (
-                      <div key={i} style={{ background: C.surface, borderRadius: 6, padding: "4px 10px", fontSize: 12, color: C.text }}>
-                        {ex?.unit === "kg" ? `${s.weight}kg × ${s.reps}` : `${s.reps} reps`}
-                      </div>
-                    ))}
-                  </div>
-                  {entry.notes && <div style={{ fontSize: 12, color: C.muted, marginTop: 6 }}>{entry.notes}</div>}
-                </Card>
-              );
-            })
-          }
+          {exLog.length===0?<div style={{ color:C.muted, textAlign:"center", padding:30 }}>Ingen {ex?.name}-økter ennå</div>
+          :exLog.map(entry=>{ const best=bestSet(entry); return (
+            <Card key={entry.id} style={{ marginBottom:8 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                <div>
+                  <div style={{ fontSize:12, color:C.muted }}>{formatDate(entry.date)}</div>
+                  <div style={{ fontWeight:700 }}>{entry.sets.length} sett {best&&ex?.unit==="kg"?<span style={{ color:C.accent }}>· Beste: {best.weight}kg×{best.reps} (~{oneRM(best.weight,best.reps).toFixed(1)}kg)</span>:""}</div>
+                </div>
+                <Btn onClick={()=>setStrengthLog(prev=>({...prev,[active]:(prev[active]||[]).filter(e=>e.id!==entry.id)}))} small color={C.red}>Slett</Btn>
+              </div>
+              <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                {entry.sets.map((s,i)=><div key={i} style={{ background:C.bg, borderRadius:6, padding:"3px 8px", fontSize:12, color:C.text }}>{s.weight?`${s.weight}kg × `:""}{s.reps} reps</div>)}
+              </div>
+              {entry.notes&&<div style={{ fontSize:12, color:C.muted, marginTop:6 }}>{entry.notes}</div>}
+            </Card>
+          );})}
         </div>
       )}
     </div>
   );
 }
 
-// ─── STRAVA TAB ──────────────────────────────────────────────────────────────
-function StravaTab({ sessions, setSessions }) {
-  const [stravaTokens, setStravaTokens] = useStore("nm_strava_tokens", null);
-  const [, , tokensLoaded] = [stravaTokens, setStravaTokens, true];
-  const [backendUrl, setBackendUrl] = useStore("nm_strava_backend", "");
-  const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState(null);
-  const [urlInput, setUrlInput] = useState("");
+// ─── GOALS TAB ────────────────────────────────────────────────────────────────
+function GoalsTab({ goals, setGoals, sessions }) {
+  const [form,setForm]=useState({ name:"", date:"", distanceKm:"", targetTime:"", notes:"" });
 
-  const [manualToken, setManualToken] = useState("");
-  const [showManual, setShowManual] = useState(false);
-
-  // On mount, check for tokens in URL hash (after OAuth redirect)
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes("access_token")) {
-      const params = new URLSearchParams(hash.replace("#", ""));
-      const tokens = {
-        access_token: params.get("access_token"),
-        refresh_token: params.get("refresh_token"),
-        expires_at: parseInt(params.get("expires_at")),
-        athlete_id: params.get("athlete_id"),
-      };
-      if (tokens.access_token) {
-        setStravaTokens(tokens);
-        window.history.replaceState(null, "", window.location.pathname);
-        setSyncResult({ type: "success", msg: "✅ Strava koblet til! Trykk 'Synkroniser' for å hente aktiviteter." });
-      }
-    }
-  }, []);
-
-  function connectStrava() {
-    const base = (backendUrl || urlInput).replace(/\/$/, "");
-    if (!base) { setSyncResult({ type: "error", msg: "Legg inn Vercel-URL først." }); return; }
-    // Open in new tab – artefakter blokkerer redirect i samme vindu
-    window.open(`${base}/api/auth`, "_blank");
-    setShowManual(true);
-    setSyncResult({ type: "info", msg: "🔗 Strava åpnet i nytt vindu. Logg inn der, kopier URL-en du lander på, og lim den inn under." });
+  function targetPace(goal) {
+    if (!goal.distanceKm||!goal.targetTime) return null;
+    const parts=goal.targetTime.split(":").map(Number);
+    const totalMin=parts.length===3?parts[0]*60+parts[1]+parts[2]/60:parts[0]+parts[1]/60;
+    const pace=totalMin/parseFloat(goal.distanceKm);
+    return `${Math.floor(pace)}:${String(Math.round((pace%1)*60)).padStart(2,"0")} min/km`;
   }
-
-  function pasteCallbackUrl() {
-    try {
-      const url = new URL(manualToken.includes("#") ? manualToken.replace("#", "?HASH=") : manualToken);
-      // Try hash params first
-      let params;
-      if (manualToken.includes("#")) {
-        const hashPart = manualToken.split("#")[1];
-        params = new URLSearchParams(hashPart);
-      } else {
-        params = new URLSearchParams(url.search);
-      }
-      const tokens = {
-        access_token: params.get("access_token"),
-        refresh_token: params.get("refresh_token"),
-        expires_at: parseInt(params.get("expires_at")),
-        athlete_id: params.get("athlete_id"),
-      };
-      if (!tokens.access_token) {
-        setSyncResult({ type: "error", msg: "❌ Fant ikke access_token i URL-en. Kopier hele URL-en fra adressefeltet etter innlogging." });
-        return;
-      }
-      setStravaTokens(tokens);
-      setShowManual(false);
-      setManualToken("");
-      setSyncResult({ type: "success", msg: "✅ Strava koblet til! Trykk 'Synkroniser' for å hente aktiviteter." });
-    } catch {
-      setSyncResult({ type: "error", msg: "❌ Ugyldig URL. Kopier hele URL-en fra adressefeltet i nettleseren etter at du har logget inn på Strava." });
-    }
-  }
-
-  async function syncActivities() {
-    if (!stravaTokens?.access_token) { setSyncResult({ type: "error", msg: "Koble til Strava først." }); return; }
-    const base = (backendUrl || urlInput).replace(/\/$/, "");
-    if (!base) { setSyncResult({ type: "error", msg: "Legg inn Vercel-URL først." }); return; }
-
-    setSyncing(true);
-    setSyncResult(null);
-    try {
-      // Fetch last 90 days
-      const after = Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 90;
-      const params = new URLSearchParams({
-        access_token: stravaTokens.access_token,
-        refresh_token: stravaTokens.refresh_token,
-        expires_at: stravaTokens.expires_at,
-        after,
-      });
-      const res = await fetch(`${base}/api/activities?${params}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      // Update tokens if refreshed
-      if (data.tokens) setStravaTokens(data.tokens);
-
-      // Merge: keep manually-logged sessions, add/update Strava ones
-      const stravaIds = new Set(data.sessions.map(s => s.stravaId));
-      setSessions(prev => {
-        const withoutOldStrava = prev.filter(s => !s.stravaId || !stravaIds.has(s.stravaId));
-        return [...withoutOldStrava, ...data.sessions].sort((a, b) => b.date.localeCompare(a.date));
-      });
-
-      setSyncResult({ type: "success", msg: `✅ Hentet ${data.sessions.length} aktiviteter fra Strava. Manuelt loggede notater beholdes.` });
-    } catch (err) {
-      setSyncResult({ type: "error", msg: `❌ Feil: ${err.message}. Sjekk at Vercel-URL er korrekt.` });
-    } finally {
-      setSyncing(false);
-    }
-  }
-
-  function disconnect() {
-    setStravaTokens(null);
-    setSyncResult({ type: "info", msg: "Strava-tilkobling fjernet." });
-  }
-
-  const isConnected = !!stravaTokens?.access_token;
-  const savedUrl = backendUrl || urlInput;
 
   return (
     <div>
-      <h3 style={{ color: "#FC4C02", marginBottom: 4 }}>🟠 Strava-synkronisering</h3>
-      <div style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Hent aktiviteter automatisk fra Strava</div>
-
-      {/* Step 1: Backend URL */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>STEG 1 – VERCEL BACKEND URL</div>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 10, lineHeight: 1.5 }}>
-          Lim inn URL-en til din deployede Vercel-backend (f.eks. <span style={{ color: C.accent }}>https://nm-strava.vercel.app</span>)
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>🎯 Treningsmål</h3>
+      <Card style={{ marginBottom:16, borderLeft:`4px solid ${C.accent}` }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>NYTT MÅL</div>
+        <Input label="Løp / arrangement" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="f.eks. Drammen halvmaraton" />
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <Input label="Dato" type="date" value={form.date} onChange={v=>setForm(p=>({...p,date:v}))} />
+          <Input label="Distanse (km)" type="number" value={form.distanceKm} onChange={v=>setForm(p=>({...p,distanceKm:v}))} placeholder="21.1" />
         </div>
-        <Input label="Vercel backend URL" value={urlInput || backendUrl} onChange={v => { setUrlInput(v); setBackendUrl(v); }} placeholder="https://din-app.vercel.app" />
+        <Input label="Målid (t:mm:ss)" value={form.targetTime} onChange={v=>setForm(p=>({...p,targetTime:v}))} placeholder="1:45:00" />
+        <Btn onClick={()=>{ if(!form.name||!form.date) return; setGoals(prev=>[...prev,{...form,id:Date.now()}]); setForm({name:"",date:"",distanceKm:"",targetTime:"",notes:""}); }} color={C.green}>Legg til mål</Btn>
       </Card>
 
-      {/* Step 2: Connect */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>STEG 2 – KOBLE TIL STRAVA</div>
-        {isConnected ? (
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <Badge label="✓ TILKOBLET" color={C.green} />
-              <span style={{ fontSize: 13, color: C.muted }}>Strava-konto koblet til</span>
-            </div>
-            <Btn onClick={disconnect} small color={C.red}>Koble fra</Btn>
-          </div>
-        ) : (
-          <div>
-            <div style={{ fontSize: 13, color: C.muted, marginBottom: 10 }}>
-              Åpner Strava i nytt vindu. Etter innlogging kopierer du URL-en og limer inn under.
-            </div>
-            <Btn onClick={connectStrava} color="#FC4C02" style={{ color: C.white, marginBottom: 12 }}>🟠 Åpne Strava-innlogging</Btn>
-            {showManual && (
+      {goals.length===0&&<div style={{ color:C.muted, textAlign:"center", padding:30 }}>Ingen mål satt ennå</div>}
+      {goals.map(goal=>{
+        const parts=analyzeGoalProgress({goal,sessions});
+        return (
+          <Card key={goal.id} style={{ marginBottom:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
               <div>
-                <div style={{ fontSize: 12, color: C.yellow, marginBottom: 6, lineHeight: 1.5 }}>
-                  📋 Etter at du har godkjent i Strava-vinduet: kopier hele URL-en fra adressefeltet og lim inn her:
-                </div>
-                <Textarea value={manualToken} onChange={setManualToken} rows={2} placeholder="https://din-app.vercel.app/?strava_auth=1#access_token=..." />
-                <Btn onClick={pasteCallbackUrl} color={C.green} style={{ width: "100%" }}>✓ Bekreft tilkobling</Btn>
+                <div style={{ fontSize:18, fontWeight:800 }}>{goal.name}</div>
+                <div style={{ color:C.muted, fontSize:13 }}>{formatDate(goal.date)} · {daysUntil(goal.date)} dager igjen</div>
               </div>
-            )}
-          </div>
-        )}
-      </Card>
-
-      {/* Step 3: Sync */}
-      <Card style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12, color: C.accent, fontWeight: 700, marginBottom: 8 }}>STEG 3 – SYNKRONISER</div>
-        <div style={{ fontSize: 13, color: C.muted, marginBottom: 10 }}>
-          Henter siste 90 dager. Manuelt loggede notater og drag-detaljer beholdes.
-        </div>
-        <Btn onClick={syncActivities} color={isConnected ? C.green : C.muted} style={{ width: "100%" }}>
-          {syncing ? "⏳ Synkroniserer..." : "🔄 Synkroniser fra Strava"}
-        </Btn>
-      </Card>
-
-      {syncResult && (
-        <Card style={{ borderColor: syncResult.type === "error" ? C.red + "55" : C.green + "55" }}>
-          <div style={{ fontSize: 13, color: syncResult.type === "error" ? C.red : C.green, lineHeight: 1.6 }}>{syncResult.msg}</div>
-        </Card>
-      )}
-
-      {/* Setup guide */}
-      <Card style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, color: C.yellow, fontWeight: 700, marginBottom: 10 }}>📋 OPPSETTGUIDE (én gang)</div>
-        {[
-          { n: "1", t: "Opprett Strava API-app", d: "Gå til strava.com/settings/api → lag ny app → kopier Client ID og Client Secret" },
-          { n: "2", t: "Last ned backend-koden", d: "Klikk «Last ned backend» under og pakk ut ZIP-filen" },
-          { n: "3", t: "Deploy til Vercel", d: "Gå til vercel.com → «New Project» → dra inn mappen → deploy" },
-          { n: "4", t: "Legg til miljøvariabler", d: "I Vercel: Settings → Environment Variables → legg inn STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, BASE_URL (din Vercel-URL)" },
-          { n: "5", t: "Sett Callback URL i Strava", d: "I Strava API-appen: Authorization Callback Domain = din-app.vercel.app" },
-          { n: "6", t: "Koble til her", d: "Lim inn Vercel-URL over, trykk «Koble til Strava», godkjenn, og synkroniser!" },
-        ].map(({ n, t, d }) => (
-          <div key={n} style={{ display: "flex", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ width: 22, height: 22, borderRadius: "50%", background: C.accent + "33", color: C.accent, fontSize: 11, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{n}</div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{t}</div>
-              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{d}</div>
+              <Btn onClick={()=>setGoals(prev=>prev.filter(g=>g.id!==goal.id))} small color={C.red}>Slett</Btn>
             </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+              <Stat label="Distanse" value={goal.distanceKm||"–"} unit="km" />
+              <Stat label="Målid" value={goal.targetTime||"–"} unit="" color={C.yellow} />
+              <Stat label="Mål-tempo" value={targetPace(goal)||"–"} unit="" color={C.green} />
+            </div>
+            <div style={{ background:C.bg, borderRadius:10, padding:12 }}>
+              <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>📊 FORMANALYSE</div>
+              {parts.map((p,i)=>{
+                const warn=p.startsWith("📉")||p.startsWith("⚠️")||p.startsWith("🚨");
+                const good=p.startsWith("✅")||p.startsWith("🚀");
+                return <div key={i} style={{ fontSize:13, color:warn?C.red:good?C.green:C.text, lineHeight:1.6, padding:"4px 0", borderBottom:i<parts.length-1?`1px solid ${C.border}`:"none" }}>{p}</div>;
+              })}
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── NUTRITION TAB ────────────────────────────────────────────────────────────
+function NutritionTab() {
+  const dow=dayOfWeek(todayStr());
+  const todayType=DEFAULT_WEEKLY[dow]?.[0]?.type||"easy";
+  const nut=NUTRITION[todayType]||NUTRITION.easy;
+  return (
+    <div>
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:4 }}>🥗 Ernæring</h3>
+      <div style={{ color:C.muted, fontSize:13, marginBottom:16 }}>Tilpasset dagens økttype</div>
+      {[{title:"🌅 Før økt",content:nut.before},{title:"🏃 Under økt",content:nut.during},{title:"✅ Etter økt",content:nut.after},{title:"📅 Hele dagen",content:nut.general}].map(({title,content})=>(
+        <Card key={title} style={{ marginBottom:10 }}>
+          <div style={{ fontSize:12, color:C.accent, fontWeight:700, marginBottom:6 }}>{title}</div>
+          <div style={{ fontSize:13, color:C.text, lineHeight:1.6 }}>{content}</div>
+        </Card>
+      ))}
+      <Card>
+        <div style={{ fontSize:12, color:C.yellow, fontWeight:700, marginBottom:8 }}>⚡ VIKTIGE NÆRINGSSTOFFER</div>
+        {[{name:"Jern",tip:"15mg/dag (kvinner). Rødt kjøtt, linser, spinat + C-vitamin. Unngå kaffe/te til jernrik mat."},{name:"B12",tip:"2.4μg/dag. Kjøtt, fisk, egg, meieri. Sjekk blodprøve årlig."},{name:"D-vitamin",tip:"1000–2000 IU/dag. Supplement anbefalt i Norge."},{name:"Magnesium",tip:"300–400mg/dag. Nøtter, mørk sjokolade. Reduserer kramper."},{name:"Karbo",tip:"Lett dag: 5–6g/kg. Hard dag: 7–10g/kg."},{name:"Protein",tip:"1.6–2.0g/kg/dag fordelt på 4–5 måltider á 20–30g."}].map(({name,tip})=>(
+          <div key={name} style={{ padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ fontWeight:700, color:C.text, fontSize:13 }}>{name}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{tip}</div>
           </div>
         ))}
       </Card>
@@ -1518,67 +883,287 @@ function StravaTab({ sessions, setSessions }) {
   );
 }
 
-// ─── MAIN APP ────────────────────────────────────────────────────────────────
-function App() {
-  const [tab, setTab] = useState("dashboard");
-  const [sessions, setSessions, sessionsLoaded] = useStore("nm_sessions", []);
-  const [morningData, setMorningData, morningLoaded] = useStore("nm_morning", {});
-  const [goals, setGoals, goalsLoaded] = useStore("nm_goals", []);
-  const [plannedSessions, setPlannedSessions, planLoaded] = useStore("nm_plan", {});
-  const [strengthLog, setStrengthLog, strengthLoaded] = useStore("nm_strength", {});
+// ─── RECOVERY TAB ─────────────────────────────────────────────────────────────
+function RecoveryTab({ sessions, morningData }) {
+  const last=sessions[0];
+  const rec=last?RECOVERY[last.type]||RECOVERY.easy:null;
+  const hvData=Object.entries(morningData).sort(([a],[b])=>a.localeCompare(b)).slice(-7);
 
-  const allLoaded = sessionsLoaded && morningLoaded && goalsLoaded && planLoaded && strengthLoaded;
-
-  if (!allLoaded) {
-    return (
-      <div style={{ background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-        <div style={{ fontSize: 32 }}>🏃</div>
-        <div style={{ color: C.accent, fontWeight: 700, fontSize: 16 }}>Laster treningsdata...</div>
-        <div style={{ color: C.muted, fontSize: 13 }}>Henter lagrede data</div>
-      </div>
-    );
+  function hrvTrend() {
+    const vals=hvData.map(([,m])=>parseFloat(m.hrv)).filter(Boolean);
+    if (vals.length<3) return null;
+    const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+    const last=vals[vals.length-1];
+    const diff=((last-avg)/avg)*100;
+    return { diff, color:diff<-10?C.red:diff>10?C.green:C.yellow, label:diff<-10?"Nedadgående ⚠️":diff>10?"Stigende ✅":"Stabil" };
   }
-
-  const tabContent = {
-    dashboard: <DashboardTab sessions={sessions} morningData={morningData} setMorningData={setMorningData} goals={goals} plannedSessions={plannedSessions} />,
-    plan: <PlanTab plannedSessions={plannedSessions} setPlannedSessions={setPlannedSessions} sessions={sessions} />,
-    log: <LogTab sessions={sessions} setSessions={setSessions} />,
-    sessions: <SessionsTab sessions={sessions} setSessions={setSessions} />,
-    strength: <StrengthTab strengthLog={strengthLog} setStrengthLog={setStrengthLog} />,
-    strava: <StravaTab sessions={sessions} setSessions={setSessions} />,
-    goals: <GoalsTab goals={goals} setGoals={setGoals} sessions={sessions} />,
-    nutrition: <NutritionTab sessions={sessions} />,
-    recovery: <RecoveryTab sessions={sessions} morningData={morningData} />,
-  };
+  const trend=hrvTrend();
 
   return (
-    <div style={{ background: C.bg, minHeight: "100vh", fontFamily: "'DM Sans', 'Segoe UI', system-ui, sans-serif", color: C.text }}>
-      {/* Header */}
-      <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "12px 16px", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: C.accent + "22", border: `1px solid ${C.accent}44`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>🏃</div>
-          <div>
-            <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: 0.5 }}>Norwegian Method</div>
-            <div style={{ fontSize: 10, color: C.muted, letterSpacing: 1 }}>TRENINGSDAGBOK</div>
+    <div>
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>💤 Restitusjon</h3>
+      {last&&rec&&(
+        <Card style={{ marginBottom:12, borderLeft:`4px solid ${C.accent}` }}>
+          <div style={{ fontSize:11, color:C.muted, fontWeight:700, marginBottom:8 }}>ETTER SISTE ØKT ({formatDate(last.date)})</div>
+          <div style={{ color:C.yellow, fontWeight:700, marginBottom:8 }}>⏱ {rec.hours}</div>
+          {rec.tips.map(tip=><div key={tip} style={{ fontSize:13, color:C.text, padding:"4px 0", borderBottom:`1px solid ${C.border}` }}>• {tip}</div>)}
+        </Card>
+      )}
+      {hvData.length>0&&(
+        <Card style={{ marginBottom:12 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+            <div style={{ fontSize:11, color:C.muted, fontWeight:700 }}>MORGENDATA SISTE 7 DAGER</div>
+            {trend&&<Badge label={trend.label} color={trend.color}/>}
           </div>
+          {hvData.map(([date,m])=>(
+            <div key={date} style={{ display:"flex", justifyContent:"space-between", padding:"5px 0", borderBottom:`1px solid ${C.border}`, fontSize:13 }}>
+              <span style={{ color:C.muted, minWidth:30 }}>{DAYS_SHORT[dayOfWeek(date)]}</span>
+              <span>{m.hr?`❤️ ${m.hr}`:""}</span>
+              <span style={{ color:C.green }}>{m.hrv?`HRV ${m.hrv}ms`:""}</span>
+              <span style={{ color:C.muted }}>{m.sleep?`😴 ${m.sleep}t`:""}</span>
+            </div>
+          ))}
+        </Card>
+      )}
+      <Card>
+        <div style={{ fontSize:12, color:C.yellow, fontWeight:700, marginBottom:8 }}>NORWEGIAN METHOD – PRINSIPPER</div>
+        {[{t:"80/20-regelen",d:"80% lett (sone 1–2), 20% hard. Overtrening er den vanligste feilen."},{t:"Dobbel terskel",d:"Maks 2 terskeløkter/uke. 36–48t mellom harde økter."},{t:"HRV-styrt",d:"HRV >10% under norm: lett dag. Over norm: grønt lys."},{t:"Søvn er trening",d:"8–9 timer optimalt. Søvnunderskudd nullstiller gevinst."},{t:"Aktiv restitusjon",d:"Lett sykkel/svømming akselererer restitusjon."}].map(({t,d})=>(
+          <div key={t} style={{ padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ fontWeight:700, fontSize:13 }}>{t}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{d}</div>
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+// ─── STRAVA TAB ───────────────────────────────────────────────────────────────
+function StravaTab({ sessions, setSessions }) {
+  const [stravaTokens,setStravaTokens]=useStore("nm_strava_tokens",null);
+  const [backendUrl,setBackendUrl]=useStore("nm_strava_backend","");
+  const [syncing,setSyncing]=useState(false);
+  const [syncResult,setSyncResult]=useState(null);
+  const [showManual,setShowManual]=useState(false);
+  const [manualToken,setManualToken]=useState("");
+
+  function connectStrava(){
+    const base=(backendUrl).replace(/\/$/,"");
+    if(!base){setSyncResult({type:"error",msg:"Legg inn Vercel-URL først."});return;}
+    window.open(`${base}/api/auth`,"_blank");
+    setShowManual(true);
+    setSyncResult({type:"info",msg:"🔗 Strava åpnet i nytt vindu. Logg inn, kopier URL-en du lander på, og lim inn under."});
+  }
+
+  function pasteCallbackUrl(){
+    try {
+      let params;
+      if(manualToken.includes("#")){ params=new URLSearchParams(manualToken.split("#")[1]); }
+      else { params=new URLSearchParams(new URL(manualToken).search); }
+      const tokens={ access_token:params.get("access_token"), refresh_token:params.get("refresh_token"), expires_at:parseInt(params.get("expires_at")), athlete_id:params.get("athlete_id") };
+      if(!tokens.access_token){setSyncResult({type:"error",msg:"❌ Fant ikke access_token i URL-en."});return;}
+      setStravaTokens(tokens); setShowManual(false); setManualToken("");
+      setSyncResult({type:"success",msg:"✅ Strava koblet til! Trykk 'Synkroniser'."});
+    } catch { setSyncResult({type:"error",msg:"❌ Ugyldig URL. Kopier hele URL-en fra adressefeltet."}); }
+  }
+
+  async function syncActivities(){
+    if(!stravaTokens?.access_token){setSyncResult({type:"error",msg:"Koble til Strava først."});return;}
+    const base=backendUrl.replace(/\/$/,"");
+    setSyncing(true); setSyncResult(null);
+    try {
+      const after=Math.floor(Date.now()/1000)-60*60*24*90;
+      const p=new URLSearchParams({ access_token:stravaTokens.access_token, refresh_token:stravaTokens.refresh_token, expires_at:stravaTokens.expires_at, after });
+      const res=await fetch(`${base}/api/activities?${p}`);
+      if(!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data=await res.json();
+      if(data.tokens) setStravaTokens(data.tokens);
+      const ids=new Set(data.sessions.map(s=>s.stravaId));
+      setSessions(prev=>[...prev.filter(s=>!s.stravaId||!ids.has(s.stravaId)),...data.sessions].sort((a,b)=>b.date.localeCompare(a.date)));
+      setSyncResult({type:"success",msg:`✅ Hentet ${data.sessions.length} aktiviteter.`});
+    } catch(err){ setSyncResult({type:"error",msg:`❌ Feil: ${err.message}`}); }
+    finally{ setSyncing(false); }
+  }
+
+  const isConnected=!!stravaTokens?.access_token;
+  return (
+    <div>
+      <h3 style={{ color:"#FC4C02", fontWeight:800, marginBottom:16 }}>🟠 Strava-synkronisering</h3>
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 1 – VERCEL URL</div>
+        <Input label="Din Vercel backend URL" value={backendUrl} onChange={setBackendUrl} placeholder="https://nm-strava-sync.vercel.app" />
+      </Card>
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 2 – KOBLE TIL</div>
+        {isConnected?(
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <Badge label="✓ TILKOBLET" color={C.green}/>
+            <Btn onClick={()=>setStravaTokens(null)} small color={C.red}>Koble fra</Btn>
+          </div>
+        ):(
+          <div>
+            <Btn onClick={connectStrava} color="#FC4C02" style={{ color:"#fff", marginBottom:showManual?12:0 }}>🟠 Åpne Strava-innlogging</Btn>
+            {showManual&&(
+              <div>
+                <div style={{ fontSize:12, color:C.yellow, marginBottom:6, marginTop:8 }}>Kopier hele URL-en etter innlogging og lim inn her:</div>
+                <Textarea value={manualToken} onChange={setManualToken} rows={2} placeholder="https://din-app.vercel.app/?strava_auth=1#access_token=..." />
+                <Btn onClick={pasteCallbackUrl} color={C.green} style={{ width:"100%" }}>✓ Bekreft</Btn>
+              </div>
+            )}
+          </div>
+        )}
+      </Card>
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>STEG 3 – SYNKRONISER</div>
+        <Btn onClick={syncActivities} color={isConnected?C.green:C.muted} style={{ width:"100%" }}>{syncing?"⏳ Synkroniserer...":"🔄 Synkroniser fra Strava"}</Btn>
+      </Card>
+      {syncResult&&<Card style={{ borderLeft:`4px solid ${syncResult.type==="error"?C.red:C.green}` }}><div style={{ fontSize:13, color:syncResult.type==="error"?C.red:C.green }}>{syncResult.msg}</div></Card>}
+    </div>
+  );
+}
+
+// ─── PROFILE TAB ─────────────────────────────────────────────────────────────
+function ProfileTab({ profile, setProfile }) {
+  const [form,setForm]=useState(profile||{ name:"", normHr:"50", normHrv:"65", maxHr:"185", zone1:"", zone2:"", zone3:"", zone4:"", zone5:"", weightKg:"", birthYear:"" });
+  const [saved,setSaved]=useState(false);
+
+  function computeZones(){
+    const max=parseFloat(form.maxHr)||185;
+    setForm(p=>({
+      ...p,
+      zone1:`${Math.round(max*0.5)}–${Math.round(max*0.6)} bpm`,
+      zone2:`${Math.round(max*0.6)}–${Math.round(max*0.7)} bpm`,
+      zone3:`${Math.round(max*0.7)}–${Math.round(max*0.8)} bpm`,
+      zone4:`${Math.round(max*0.8)}–${Math.round(max*0.9)} bpm`,
+      zone5:`${Math.round(max*0.9)}–${max} bpm`,
+    }));
+  }
+
+  function save(){ setProfile(form); setSaved(true); setTimeout(()=>setSaved(false),1200); }
+
+  const zones=[
+    {z:"Sone 1 – Lett",pct:"50–60%",field:"zone1",color:C.green,desc:"Aktiv restitusjon, lett jogging"},
+    {z:"Sone 2 – Aerob",pct:"60–70%",field:"zone2",color:"#84cc16",desc:"Basis aerob, langkjøring"},
+    {z:"Sone 3 – Tempo",pct:"70–80%",field:"zone3",color:C.yellow,desc:"Moderat hard, halvmaraton-tempo"},
+    {z:"Sone 4 – Terskel",pct:"80–90%",field:"zone4",color:C.orange,desc:"Laktatterskelen, intervaller"},
+    {z:"Sone 5 – Maks",pct:"90–100%",field:"zone5",color:C.red,desc:"Maksimal intensitet, sprinter"},
+  ];
+
+  return (
+    <div>
+      <h3 style={{ color:C.text, fontWeight:800, marginBottom:16 }}>👤 Profil & Pulssoner</h3>
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>PERSONLIG INFO</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <Input label="Navn" value={form.name} onChange={v=>setForm(p=>({...p,name:v}))} placeholder="Ditt navn" />
+          <Input label="Fødselsår" type="number" value={form.birthYear} onChange={v=>setForm(p=>({...p,birthYear:v}))} placeholder="1990" />
+          <Input label="Vekt (kg)" type="number" value={form.weightKg} onChange={v=>setForm(p=>({...p,weightKg:v}))} placeholder="65" />
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:10 }}>NORMALE VERDIER</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          <Input label="Normal hvilepuls (bpm)" type="number" value={form.normHr} onChange={v=>setForm(p=>({...p,normHr:v}))} placeholder="50" />
+          <Input label="Normal HRV (ms)" type="number" value={form.normHrv} onChange={v=>setForm(p=>({...p,normHrv:v}))} placeholder="65" />
+        </div>
+        <div style={{ fontSize:12, color:C.muted, background:C.bg, borderRadius:8, padding:10, marginTop:4 }}>
+          💡 Disse brukes av dashboardet for å vurdere om dagens verdier er over/under din personlige norm.
+        </div>
+      </Card>
+
+      <Card style={{ marginBottom:12 }}>
+        <div style={{ fontSize:11, color:C.accent, fontWeight:700, marginBottom:8 }}>PULSSONER</div>
+        <div style={{ display:"flex", gap:8, alignItems:"flex-end", marginBottom:12 }}>
+          <Input label="Makspuls (bpm)" type="number" value={form.maxHr} onChange={v=>setForm(p=>({...p,maxHr:v}))} placeholder="185" style={{ marginBottom:0 }} />
+          <Btn onClick={computeZones} small color={C.accent} style={{ marginBottom:0 }}>Beregn soner</Btn>
+        </div>
+        {zones.map(({z,pct,field,color,desc})=>(
+          <div key={field} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:`1px solid ${C.border}` }}>
+            <div style={{ width:10, height:36, borderRadius:3, background:color, flexShrink:0 }}/>
+            <div style={{ flex:1 }}>
+              <div style={{ fontWeight:700, fontSize:13 }}>{z} <span style={{ color:C.muted, fontWeight:400 }}>({pct})</span></div>
+              <div style={{ fontSize:11, color:C.muted }}>{desc}</div>
+            </div>
+            <div style={{ fontWeight:700, color, fontSize:13, minWidth:90, textAlign:"right" }}>{form[field]||"–"}</div>
+          </div>
+        ))}
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11, color:C.muted, marginBottom:8 }}>Eller juster manuelt:</div>
+          {zones.map(({z,field,color})=>(
+            <Input key={field} label={z} value={form[field]} onChange={v=>setForm(p=>({...p,[field]:v}))} placeholder="f.eks. 130–145 bpm" />
+          ))}
+        </div>
+      </Card>
+
+      <Btn onClick={save} color={C.green} style={{ width:"100%" }}>{saved?"✓ Lagret!":"Lagre profil"}</Btn>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function App() {
+  const [tab,setTab]=useState("dashboard");
+  const [sessions,setSessions]=useStore("nm_sessions",[]);
+  const [morningData,setMorningData]=useStore("nm_morning",{});
+  const [goals,setGoals]=useStore("nm_goals",[]);
+  const [plannedSessions,setPlannedSessions]=useStore("nm_plan",{});
+  const [strengthLog,setStrengthLog]=useStore("nm_strength",{});
+  const [profile,setProfile]=useStore("nm_profile",{ name:"", normHr:"50", normHrv:"65", maxHr:"185", zone1:"", zone2:"", zone3:"", zone4:"", zone5:"", weightKg:"", birthYear:"" });
+
+  const tabContent={
+    dashboard:<DashboardTab sessions={sessions} morningData={morningData} setMorningData={setMorningData} goals={goals} plannedSessions={plannedSessions} profile={profile}/>,
+    calendar:<CalendarTab plannedSessions={plannedSessions} setPlannedSessions={setPlannedSessions} sessions={sessions}/>,
+    log:<LogTab sessions={sessions} setSessions={setSessions}/>,
+    strength:<StrengthTab strengthLog={strengthLog} setStrengthLog={setStrengthLog}/>,
+    goals:<GoalsTab goals={goals} setGoals={setGoals} sessions={sessions}/>,
+    nutrition:<NutritionTab/>,
+    recovery:<RecoveryTab sessions={sessions} morningData={morningData}/>,
+    strava:<StravaTab sessions={sessions} setSessions={setSessions}/>,
+    profile:<ProfileTab profile={profile} setProfile={setProfile}/>,
+  };
+
+  const TABS=[
+    {id:"dashboard",icon:"📊",label:"Dag"},
+    {id:"calendar",icon:"📅",label:"Kalender"},
+    {id:"log",icon:"✍️",label:"Logg"},
+    {id:"strength",icon:"💪",label:"Styrke"},
+    {id:"goals",icon:"🎯",label:"Mål"},
+    {id:"nutrition",icon:"🥗",label:"Mat"},
+    {id:"recovery",icon:"💤",label:"Restitusjon"},
+    {id:"strava",icon:"🟠",label:"Strava"},
+    {id:"profile",icon:"👤",label:"Profil"},
+  ];
+
+  return (
+    <div style={{ background:C.bg, minHeight:"100vh", fontFamily:"'Segoe UI', system-ui, sans-serif", color:C.text }}>
+      {/* Header */}
+      <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:"12px 16px", position:"sticky", top:0, zIndex:50, boxShadow:C.shadow }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <div style={{ width:32, height:32, borderRadius:8, background:C.accent+"18", border:`1.5px solid ${C.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:16 }}>🏃</div>
+          <div>
+            <div style={{ fontWeight:800, fontSize:15, color:C.text }}>Norwegian Method</div>
+            <div style={{ fontSize:10, color:C.muted, letterSpacing:1 }}>TRENINGSDAGBOK</div>
+          </div>
+          {profile?.name&&<div style={{ marginLeft:"auto", fontSize:13, color:C.muted, fontWeight:600 }}>{profile.name}</div>}
         </div>
       </div>
 
       {/* Content */}
-      <div style={{ padding: "16px 14px 100px", maxWidth: 520, margin: "0 auto" }}>
+      <div style={{ padding:"16px 14px 100px", maxWidth:520, margin:"0 auto" }}>
         {tabContent[tab]}
       </div>
 
       {/* Bottom nav */}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: C.surface, borderTop: `1px solid ${C.border}`, display: "flex", padding: "6px 0 8px", zIndex: 50 }}>
-        {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            flex: 1, background: "none", border: "none", cursor: "pointer", padding: "4px 2px",
-            display: "flex", flexDirection: "column", alignItems: "center", gap: 2, transition: "all .15s"
+      <div style={{ position:"fixed", bottom:0, left:0, right:0, background:C.surface, borderTop:`1px solid ${C.border}`, display:"flex", padding:"6px 0 8px", zIndex:50, boxShadow:"0 -2px 8px rgba(0,0,0,0.06)" }}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            flex:1, background:"none", border:"none", cursor:"pointer", padding:"3px 1px",
+            display:"flex", flexDirection:"column", alignItems:"center", gap:1
           }}>
-            <span style={{ fontSize: 18 }}>{t.icon}</span>
-            <span style={{ fontSize: 9, fontWeight: tab === t.id ? 700 : 400, color: tab === t.id ? C.accent : C.muted, letterSpacing: 0.3 }}>{t.label}</span>
-            {tab === t.id && <div style={{ width: 20, height: 2, background: C.accent, borderRadius: 2 }} />}
+            <span style={{ fontSize:17 }}>{t.icon}</span>
+            <span style={{ fontSize:9, fontWeight:tab===t.id?700:400, color:tab===t.id?C.accent:C.muted }}>{t.label}</span>
+            {tab===t.id&&<div style={{ width:18, height:2, background:C.accent, borderRadius:2, marginTop:1 }}/>}
           </button>
         ))}
       </div>
