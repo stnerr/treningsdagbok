@@ -226,157 +226,285 @@ function intensityColor(i) {
   return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
 }
 
-// ─── GOAL-BASED SESSION SUGGESTIONS ──────────────────────────────────────────
-function getGoalSuggestions(goals, profile, dow) {
-  if (!goals || goals.length === 0) return DEFAULT_WEEKLY[dow] || [];
-  const goal = goals[0];
-  const days = daysUntil(goal.date);
-  const dist = parseFloat(goal.distanceKm) || 21.1;
-  const maxHr = parseFloat(profile?.maxHr) || 185;
-  const z4Low = Math.round(maxHr * 0.80);
-  const z4High = Math.round(maxHr * 0.90);
-  const z2Low = Math.round(maxHr * 0.60);
-  const z2High = Math.round(maxHr * 0.70);
-  const z3Low = Math.round(maxHr * 0.70);
-  const z3High = Math.round(maxHr * 0.80);
+// ─── PERIODIZATION ENGINE ────────────────────────────────────────────────────
+function fmtPace(m) {
+  if (!m || isNaN(m)) return null;
+  return `${Math.floor(m)}:${String(Math.round(m % 1 * 60)).padStart(2, "0")}`;
+}
+function parseTargetPace(goal) {
+  if (!goal.targetTime || !goal.distanceKm) return null;
+  const parts = goal.targetTime.split(":").map(Number);
+  const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60 : parts[0] + parts[1] / 60;
+  return totalMin / parseFloat(goal.distanceKm);
+}
 
-  // Parse target pace
-  let targetPaceMin = null;
-  if (goal.targetTime && goal.distanceKm) {
-    const parts = goal.targetTime.split(":").map(Number);
-    const totalMin = parts.length === 3 ? parts[0] * 60 + parts[1] + parts[2] / 60 : parts[0] + parts[1] / 60;
-    targetPaceMin = totalMin / parseFloat(goal.distanceKm);
+// Returns which week number we are counting DOWN from a race date
+// Week 0 = race week, week 1 = one week before, etc.
+function weeksUntil(dateStr) {
+  return Math.floor(daysUntil(dateStr) / 7);
+}
+
+// Bølgeperiodisering: returns load factor 0.6–1.0 based on week in cycle
+// Pattern: build, build, build, recover (repeat)
+function weekLoadFactor(weeksOut) {
+  const cyclePos = weeksOut % 4; // 0=race/recover, 1=hard, 2=harder, 3=hardest
+  return [0.65, 0.80, 0.90, 1.0][cyclePos] ?? 0.85;
+}
+function getGoalSuggestions(goals, profile, dow, dateStr) {
+  if (!goals || goals.length === 0) return DEFAULT_WEEKLY[dow] || [];
+  const targetDate = dateStr || todayStr();
+  const maxHr = parseFloat(profile?.maxHr) || 185;
+  const z1 = {
+    lo: Math.round(maxHr * 0.50),
+    hi: Math.round(maxHr * 0.60)
+  };
+  const z2 = {
+    lo: Math.round(maxHr * 0.60),
+    hi: Math.round(maxHr * 0.70)
+  };
+  const z3 = {
+    lo: Math.round(maxHr * 0.70),
+    hi: Math.round(maxHr * 0.80)
+  };
+  const z4 = {
+    lo: Math.round(maxHr * 0.80),
+    hi: Math.round(maxHr * 0.90)
+  };
+  const z5 = {
+    lo: Math.round(maxHr * 0.90),
+    hi: maxHr
+  };
+
+  // Sort goals by date ascending – nearest first
+  const sorted = [...goals].sort((a, b) => a.date.localeCompare(b.date));
+  // Find the most relevant goal: nearest upcoming race
+  const primary = sorted.find(g => daysUntil(g.date) > -7) || sorted[0];
+  const secondary = sorted.find(g => g.id !== primary.id && daysUntil(g.date) > daysUntil(primary.date));
+  const daysLeft = daysUntil(primary.date);
+  const weeksLeft = weeksUntil(primary.date);
+  const dist = parseFloat(primary.distanceKm) || 21.1;
+  const isMarathon = dist >= 40;
+  const isHalf = dist >= 19 && dist < 40;
+  const is10k = dist >= 8 && dist < 19;
+  const racePace = parseTargetPace(primary);
+  const threshPace = racePace ? fmtPace(racePace * (isMarathon ? 0.98 : 1.03)) : null;
+  const easyPace = racePace ? fmtPace(racePace * 1.20) : null;
+  const longPace = racePace ? fmtPace(racePace * (isMarathon ? 1.12 : 1.15)) : null;
+  const racePaceStr = racePace ? fmtPace(racePace) : null;
+  const load = weekLoadFactor(weeksLeft);
+
+  // Determine phase
+  let phase;
+  if (daysLeft <= 0) phase = "done";else if (daysLeft <= 7) phase = "raceweek";else if (daysLeft <= 21) phase = "taper";else if (daysLeft <= 56) phase = "peak";else phase = "build";
+
+  // Progressive long run distance
+  // Base: for build phase, scale with weeks remaining + load factor
+  // Marathon: peak long run ~32–35 km, half: ~22–24 km, 10k: ~16 km
+  const peakLong = isMarathon ? 33 : isHalf ? 23 : 16;
+  const progressFactor = phase === "build" ? Math.min(load, 0.95) : phase === "peak" ? weeksLeft <= 4 ? 1.0 : load : 0.6;
+  const longRunKm = Math.round(peakLong * progressFactor);
+
+  // Progressive interval sessions – rotate through 4 different workouts by week
+  const intervalRotation = weeksLeft % 4;
+  function intervalSession1() {
+    // Long threshold – builds aerobic capacity
+    const reps = isMarathon ? 4 : is10k ? 6 : 5;
+    const dur = isMarathon ? 10 : is10k ? 6 : 8;
+    return {
+      type: "intervals",
+      intensity: "hard",
+      label: "🏃 Langt terskel",
+      desc: `${reps}×${dur} min terskel${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z4.lo}–${z4.hi} · 2 min pause`
+    };
   }
-  function fmtPace(m) {
-    return `${Math.floor(m)}:${String(Math.round(m % 1 * 60)).padStart(2, "0")}`;
+  function intervalSession2() {
+    // Medium tempo intervals
+    const reps = isMarathon ? 3 : is10k ? 8 : 5;
+    const dist2 = isMarathon ? "2 km" : is10k ? "1 km" : "1.5 km";
+    return {
+      type: "intervals",
+      intensity: "hard",
+      label: "🏃 Tempodrager",
+      desc: `${reps}×${dist2} race-tempo${racePaceStr ? ` · ${racePaceStr}/km` : ""} · Puls: ${z4.lo}–${z4.hi} · 90 sek pause`
+    };
   }
-  const threshPace = targetPaceMin ? fmtPace(targetPaceMin * 1.03) : null;
-  const easyPace = targetPaceMin ? fmtPace(targetPaceMin * 1.20) : null;
-  const longPace = targetPaceMin ? fmtPace(targetPaceMin * 1.15) : null;
-  const phase = days < 14 ? "taper" : days < 42 ? "peak" : "build";
-  const paceStr = threshPace ? ` · Terskeltemp: ${threshPace}/km` : "";
-  const easyStr = easyPace ? ` · Mål: ${easyPace}/km` : "";
-  const longStr = longPace ? ` · Mål: ${longPace}/km` : "";
-  const suggestions = {
-    build: {
+  function intervalSession3() {
+    // Short sharp – speed/economy
+    const reps = isMarathon ? 8 : is10k ? 12 : 10;
+    return {
+      type: "intervals",
+      intensity: "hard",
+      label: "🏃 Kortintervaller",
+      desc: `${reps}×400 m rask${racePace ? ` (~${fmtPace(racePace * 0.93)}/km)` : ""} · Puls: ${z4.hi}–${z5.hi} · 90 sek pause`
+    };
+  }
+  function intervalSession4() {
+    // Norwegian double threshold style
+    const reps = isMarathon ? 6 : is10k ? 8 : 7;
+    return {
+      type: "intervals",
+      intensity: "hard",
+      label: "🏃 Dobbel terskel",
+      desc: `${reps}×5 min terskel${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z3.hi}–${z4.hi} · 1 min pause – norsk metode`
+    };
+  }
+  const intSessions = [intervalSession1, intervalSession2, intervalSession3, intervalSession4];
+  const mon_interval = intSessions[intervalRotation]();
+  const thu_interval = intSessions[(intervalRotation + 2) % 4](); // different session Thursday
+
+  // Secondary goal note
+  const secondaryNote = secondary ? ` · Grunnlag for ${secondary.name} (${daysUntil(secondary.date)} dager)` : "";
+  if (phase === "done") return DEFAULT_WEEKLY[dow] || [];
+  if (phase === "raceweek") {
+    const sessions = {
+      1: [{
+        type: "easy",
+        label: "🌿 Lett jogging",
+        desc: `20 min aktivering${easyPace ? ` · ${easyPace}/km` : ""}`,
+        intensity: "easy"
+      }],
+      2: [{
+        type: "intervals",
+        label: "🏃 Aktivering",
+        desc: `4×200 m strides · Puls: ${z3.lo}–${z4.lo} · Behold spensten`,
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Hvile",
+        desc: "Full hvile – kroppen lader",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 Kort jogg",
+        desc: `15–20 min rolig + 4×100 m strides · Puls maks ${z2.hi}`,
+        intensity: "easy"
+      }],
+      5: [{
+        type: "rest",
+        label: "😴 Hvile",
+        desc: "Legg frem utstyr, spis karbo, sov tidlig",
+        intensity: "rest"
+      }],
+      6: [{
+        type: "intervals",
+        label: `🏆 ${primary.name}!`,
+        desc: `Løpsdag! Mål: ${primary.targetTime || ""}${racePaceStr ? ` · ${racePaceStr}/km` : ""}`,
+        intensity: "hard"
+      }],
+      0: []
+    };
+    return sessions[dow] || [];
+  }
+  if (phase === "taper") {
+    const tapLoad = weeksLeft <= 1 ? 0.5 : 0.7;
+    const tapLong = Math.round(longRunKm * tapLoad);
+    const sessions = {
       1: [{
         type: "intervals",
-        label: "🏃 Terskelintervaller",
-        desc: `5×5 min på terskel${paceStr} · Puls: ${z4Low}–${z4High} bpm`,
+        label: "🏃 Kort terskel",
+        desc: `3×8 min terskel${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z4.lo}–${z4.hi} · Vedlikehold form`,
         intensity: "hard"
       }],
       2: [{
-        type: "strength",
-        label: "💪 Styrke",
-        desc: "Knebøy, markløft, dips, pull-ups",
+        type: "easy",
+        label: "🌿 Rolig jogging",
+        desc: `30–40 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls: ${z1.hi}–${z2.hi}`,
         intensity: "easy"
       }],
       3: [{
-        type: "easy",
-        label: "🌿 Rolig jogging",
-        desc: `Sone 2, snakketempo${easyStr} · Puls: ${z2Low}–${z2High} bpm`,
+        type: "strength",
+        label: "💪 Lett styrke",
+        desc: "Vedlikehold, halvparten av normal vekt",
         intensity: "easy"
       }],
       4: [{
-        type: "intervals",
-        label: "🏃 Terskelintervaller",
-        desc: `3×10 min på terskel${paceStr} · Puls: ${z4Low}–${z4High} bpm`,
-        intensity: "hard"
+        type: "easy",
+        label: "🌿 Rolig jogging",
+        desc: `25–35 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls maks ${z2.hi}`,
+        intensity: "easy"
       }],
       5: [{
         type: "bike",
-        label: "🚴 Rolig sykkel",
-        desc: "Aktiv restitusjon, lett tempo",
+        label: "🚴 Lett sykkel / Fri",
+        desc: "Aktiv restitusjon eller hvile",
         intensity: "easy"
       }],
       6: [{
         type: "long",
-        label: "🏔️ Langtur",
-        desc: `${Math.round(dist * 1.1)} km rolig${longStr} · Puls: ${z2Low}–${z3Low} bpm`,
+        label: "🏔️ Kortere langtur",
+        desc: `${tapLong} km rolig${longPace ? ` · ${longPace}/km` : ""} · Puls: ${z2.lo}–${z2.hi}`,
         intensity: "medium"
       }],
       0: []
-    },
-    peak: {
-      1: [{
-        type: "intervals",
-        label: "🏃 Race-pace intervaller",
-        desc: `6×1 km på race-tempo${threshPace ? ` (${threshPace}/km)` : ""} · Puls: ${z4Low}–${z4High} bpm`,
-        intensity: "hard"
-      }],
+    };
+    return sessions[dow] || [];
+  }
+  if (phase === "peak") {
+    const sessions = {
+      1: [mon_interval],
       2: [{
         type: "strength",
-        label: "💪 Lett styrke",
-        desc: "Vedlikehold, lette vekter",
+        label: "💪 Styrke",
+        desc: "Knebøy, markløft, dips, pull-ups – full styrke",
         intensity: "easy"
       }],
       3: [{
         type: "easy",
         label: "🌿 Rolig jogging",
-        desc: `Aktiv restitusjon${easyStr} · Puls maks ${z2High} bpm`,
+        desc: `50–60 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls: ${z2.lo}–${z2.hi} – restitusjon`,
         intensity: "easy"
       }],
-      4: [{
-        type: "intervals",
-        label: "🏃 Kortintervaller",
-        desc: `10×400m rask${threshPace ? ` (~${fmtPace(targetPaceMin * 0.95)}/km)` : ""} · Puls: ${z4Low}–${maxHr} bpm`,
-        intensity: "hard"
-      }],
+      4: [thu_interval],
       5: [{
-        type: "rest",
-        label: "😴 Hvile",
-        desc: "Full hvile eller lett gange",
-        intensity: "rest"
+        type: "bike",
+        label: "🚴 Rolig sykkel",
+        desc: `Aktiv restitusjon · Puls maks ${z2.hi}`,
+        intensity: "easy"
       }],
       6: [{
         type: "long",
         label: "🏔️ Langtur",
-        desc: `${Math.round(dist * 0.9)} km inkl. siste 5 km på race-tempo${threshPace ? ` (${threshPace}/km)` : ""} · Puls: ${z2Low}–${z4Low} bpm`,
+        desc: `${longRunKm} km${longPace ? ` · ${longPace}/km` : ""} · Puls: ${z2.lo}–${z3.lo}${secondaryNote}`,
         intensity: "medium"
       }],
       0: []
-    },
-    taper: {
-      1: [{
-        type: "intervals",
-        label: "🏃 Korte aktiveringsintervaller",
-        desc: `4×200m rask · Puls: ${z4Low}–${z4High} bpm · Behold spensten`,
-        intensity: "hard"
-      }],
-      2: [{
-        type: "easy",
-        label: "🌿 Lett jogging",
-        desc: `20–30 min${easyStr}`,
-        intensity: "easy"
-      }],
-      3: [{
-        type: "rest",
-        label: "😴 Hvile",
-        desc: "Full hvile – kroppen lader opp",
-        intensity: "rest"
-      }],
-      4: [{
-        type: "easy",
-        label: "🌿 Aktivering",
-        desc: `15–20 min rolig + 4×100m strides · Puls maks ${z3High} bpm`,
-        intensity: "easy"
-      }],
-      5: [{
-        type: "rest",
-        label: "😴 Hvile",
-        desc: "Legg ut klær og utstyr",
-        intensity: "rest"
-      }],
-      6: [{
-        type: "long",
-        label: "🏆 LØPSDAG!",
-        desc: `${goal.name} · Mål: ${goal.targetTime}${threshPace ? ` · ${threshPace}/km` : ""}`,
-        intensity: "hard"
-      }],
-      0: []
-    }
+    };
+    return sessions[dow] || [];
+  }
+
+  // BUILD PHASE
+  const buildSessions = {
+    1: [mon_interval],
+    2: [{
+      type: "strength",
+      label: "💪 Styrke + alternativ",
+      desc: "Knebøy, markløft, dips, pull-ups + evt. svømming/sykkel",
+      intensity: "easy"
+    }],
+    3: [{
+      type: "easy",
+      label: "🌿 Rolig jogging",
+      desc: `45–55 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls: ${z1.hi}–${z2.hi} – snakketempo`,
+      intensity: "easy"
+    }],
+    4: [thu_interval],
+    5: [{
+      type: "bike",
+      label: "🚴 Sykkel / Fri",
+      desc: `Lett sykkel eller hvile · Puls maks ${z2.hi}`,
+      intensity: "easy"
+    }],
+    6: [{
+      type: "long",
+      label: "🏔️ Langtur",
+      desc: `${longRunKm} km rolig${longPace ? ` · ${longPace}/km` : ""} · Puls: ${z1.hi}–${z2.hi}${secondaryNote}`,
+      intensity: "medium"
+    }],
+    0: []
   };
-  return suggestions[phase][dow] || DEFAULT_WEEKLY[dow] || [];
+  return buildSessions[dow] || [];
 }
 
 // ─── ANALYSIS ────────────────────────────────────────────────────────────────
@@ -693,7 +821,7 @@ function DashboardTab({
 }) {
   const today = todayStr(),
     dow = dayOfWeek(today);
-  const todayPlans = plannedSessions[today] !== undefined ? plannedSessions[today] : getGoalSuggestions(goals, profile, dow);
+  const todayPlans = plannedSessions[today] !== undefined ? plannedSessions[today] : getGoalSuggestions(goals, profile, dow, today);
   const todaySessions = sessions.filter(s => s.date === today);
   const todayMorning = morningData[today] || {};
   const [saving, setSaving] = React.useState(false);
@@ -1091,7 +1219,7 @@ function CalendarTab({
   }
   function getPlans(date) {
     const dow = dayOfWeek(date);
-    return plannedSessions[date] !== undefined ? plannedSessions[date] : getGoalSuggestions(goals, profile, dow);
+    return plannedSessions[date] !== undefined ? plannedSessions[date] : getGoalSuggestions(goals, profile, dow, date);
   }
   function getDone(date) {
     return sessions.filter(s => s.date === date);
