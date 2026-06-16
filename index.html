@@ -437,6 +437,1006 @@ function Btn({
   }, children);
 }
 
+// ─── TRAINING PROGRAMS ────────────────────────────────────────────────────────
+// dow: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+// Each week is an object keyed by day-of-week → array of sessions
+const PROGRAMS = {
+  auto: {
+    name: "Automatisk (målbasert)",
+    desc: "Plan genereres fra dine mål og pulssoner",
+    isAuto: true
+  },
+  rw_sub4_marathon: {
+    name: "Runnersworld Sub 4:00 Maraton",
+    desc: "12-ukers program for maraton under 4 timer (5:40 min/km)",
+    weeks: [
+    // UKE 1
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 8 km rolig",
+        desc: "8 km rolig løping – behagelig og uanstrengende fart",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 2×3 km + 3×2 km",
+        desc: "10 min oppv · 2×3 km @ 5:45–5:40/km + 3×2 km @ 5:40–5:35/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 7 km rolig + styrke",
+        desc: "7 km rolig + 15-20 min styrke: utfall, hoftehev, tåhev (3×10)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 Fartslek 2×5-4-3-2-1 min",
+        desc: "Oppv 15 min · 2 serier: 5-4-3-2-1 min · 5 og 4 min @ 5:40/km, raskere per drag til 5:25/km på 1 min · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 20 km rolig langtur",
+        desc: "20 km rolig og avslappet fart",
+        intensity: "medium"
+      }]
+    },
+    // UKE 2
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 9 km rolig",
+        desc: "9 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 5×1 km on/off",
+        desc: "10 min oppv · 5×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 7 km rolig + styrke",
+        desc: "7 km rolig + styrke: utfall, hoftehev, tåhev (3×10)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 Fartslek 7-6-5-4-3-2-1 min",
+        desc: "Oppv 10 min · 7-6 min @ 5:40, 5-4 min @ 5:35, 3-2 min @ 5:30, 1 min @ 5:25/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 22 km rolig langtur",
+        desc: "22 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 3
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 9 km rolig",
+        desc: "9 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 6×1 km on/off",
+        desc: "10 min oppv · 6×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 8 km rolig + styrke",
+        desc: "8 km rolig + styrke (3×15 reps)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "easy",
+        label: "🌿 14 km rolig",
+        desc: "14 km rolig løping",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 24 km rolig langtur",
+        desc: "24 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 4
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 10 km rolig",
+        desc: "10 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 7×1 km on/off",
+        desc: "10 min oppv · 7×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 8 km rolig + styrke",
+        desc: "8 km rolig + styrke (3×15 reps)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 Fartslek 8-7-6-5-4-3-2-1 min",
+        desc: "Oppv 10 min · 8-7 @ 5:50, 6-5 @ 5:40, 4-3 @ 5:30, 2-1 @ 5:20/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 26 km rolig langtur",
+        desc: "26 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 5
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 10 km rolig",
+        desc: "10 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 3×3 km + 3×2 km",
+        desc: "10 min oppv · 3×3 km @ 5:45–5:40/km + 3×2 km @ 5:35–5:30/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 9 km rolig + styrke",
+        desc: "9 km rolig + styrke (3×20 reps)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "easy",
+        label: "🌿 15 km rolig",
+        desc: "15 km rolig løping",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 22 km progressiv langtur",
+        desc: "1–10 km rolig · 10-11 @ 6:30, 12-13 @ 6:20, 14-15 @ 6:10, 16-17 @ 6:00, 18-19 @ 5:50, 20-22 @ 5:40/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 6
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 10 km rolig",
+        desc: "10 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 8×1 km on/off",
+        desc: "10 min oppv · 8×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 9 km rolig + styrke",
+        desc: "9 km rolig + styrke (3×20 reps)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 Fartslek 3×5-4-3-2-1 min",
+        desc: "Oppv 15 min · 3 serier: 5-4-3-2-1 min · 5+4 @ 5:40, raskere per drag til 1 min @ 5:25/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 28 km rolig langtur",
+        desc: "28 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 7
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 11 km rolig",
+        desc: "11 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 4×3 km + 3×2 km",
+        desc: "10 min oppv · 4×3 km @ 5:45–5:40/km + 3×2 km @ 5:35–5:30/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig + styrke",
+        desc: "10 km rolig + styrke (3×20, tåhev 3×50)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "easy",
+        label: "🌿 16 km rolig",
+        desc: "16 km rolig løping",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 25 km progressiv langtur",
+        desc: "1–10 km rolig · 10-11 @ 6:30, 12-13 @ 6:20, 14-15 @ 6:10, 16-17 @ 6:00, 18-19 @ 5:50, 20-25 @ 5:40/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 8
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 11 km rolig",
+        desc: "11 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 9×1 km on/off",
+        desc: "10 min oppv · 9×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig + styrke",
+        desc: "10 km rolig + styrke (3×30 reps, tåhev 3×50)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 Fartslek 9-8-7-6-5-4-3-2-1 min",
+        desc: "Oppv 10 min · 9-8-7 @ 5:40, 6-5 @ 5:30, 4-3 @ 5:20, 2-1 @ 5:10/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 25 km rolig langtur",
+        desc: "25 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 9
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 12 km rolig",
+        desc: "12 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 3×4 km + 3×2 km",
+        desc: "10 min oppv · 3×4 km @ 5:45–5:40/km + 3×2 km @ 5:35–5:30/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig + styrke",
+        desc: "10 km rolig + styrke (3×30 reps, tåhev 3×50)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "easy",
+        label: "🌿 17 km rolig",
+        desc: "17 km rolig løping",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 28 km progressiv langtur",
+        desc: "1–10 km rolig · 10-11 @ 6:30, 12-13 @ 6:20, 14-15 @ 6:10, 16-17 @ 6:00, 18-19 @ 5:50, 20-28 @ 5:40/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 10
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 12 km rolig",
+        desc: "12 km rolig løping",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 4×4 km",
+        desc: "10 min oppv · 4×4 km @ 5:45–5:40/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig + styrke",
+        desc: "10 km rolig + styrke (3×30 reps, tåhev 3×50)",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "easy",
+        label: "🌿 18 km rolig",
+        desc: "18 km rolig løping",
+        intensity: "easy"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 32 km rolig langtur",
+        desc: "32 km rolig – programmets lengste løpetur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 11 – Begynnende tapering
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 10 km rolig + stigningsløp",
+        desc: "10 km rolig + 4 stigningsløp (0 → 90% av maksfart)",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 5×4 km",
+        desc: "10 min oppv · 5×4 km: første 2 @ 5:45–5:40, siste 2 @ 5:35–5:30/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 8 km rolig + stigningsløp",
+        desc: "8 km rolig + 4 stigningsløp",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 6×1 km on/off",
+        desc: "10 min oppv · 6×1 km @ 5:40/km · pause: 1 km @ 6:10/km · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 14 km rolig langtur",
+        desc: "14 km rolig – begynner formtoppingsfasen",
+        intensity: "medium"
+      }]
+    },
+    // UKE 12 – Løpsuke
+    {
+      1: [],
+      2: [{
+        type: "easy",
+        label: "🌿 8 km rolig + stigningsløp",
+        desc: "8 km rolig + 4 stigningsløp opp mot 90% av maksfart",
+        intensity: "easy"
+      }],
+      3: [{
+        type: "intervals",
+        label: "🏃 2×3 km",
+        desc: "10 min oppv · 2×3 km @ 5:40/km · 90 sek pause · 5 min nedjogg – mestringsfølelse på maratonfart",
+        intensity: "hard"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 6 km rolig + stigningsløp",
+        desc: "6 km rolig + 4 stigningsløp opp mot 90% av maksfart",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "rest",
+        label: "😴 Fri",
+        desc: "Hvile – spar energi til løpet",
+        intensity: "rest"
+      }],
+      6: [{
+        type: "easy",
+        label: "🌿 4 km rolig + stigningsløp",
+        desc: "4 km rolig + 6 stigningsløp opp mot 90% av maksfart",
+        intensity: "easy"
+      }],
+      0: [{
+        type: "race",
+        label: "🏆 LØPSDAG – Maraton!",
+        desc: "Spis frokost 2t før. Varm opp 5-10 min. Hold 5:40/km første mil – ikke bli tatt av adrenalinet! Prøv jevnt tempo til km 30.",
+        intensity: "hard"
+      }]
+    }]
+  },
+  rw_sub145_half: {
+    name: "Runnersworld Sub 1:45 Halvmaraton",
+    desc: "12-ukers program for halvmaraton under 1 time og 45 min (4:58 min/km)",
+    weeks: [
+    // UKE 1
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 10×3 min",
+        desc: "10 min oppv · 10×3 min @ 4:55–4:50/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 7 km rolig",
+        desc: "7 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 6×1000 m",
+        desc: "10 min oppv · 6×1000 m @ 5:00–4:55/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 14 km rolig langtur",
+        desc: "14 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 2
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 Fartslek 4×3-2-1 min",
+        desc: "Oppv 15 min · 4 serier: 3 min @ 4:55, 2 min @ 4:50, 1 min @ 4:45/km · 1 min pause mellom drag · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 7 km rolig",
+        desc: "7 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 3×2000 m",
+        desc: "10 min oppv · 3×2000 m @ 5:00–4:55/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile eller alternativ trening",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 15 km rolig langtur",
+        desc: "15 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 3
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 8×2 min + 10×1 min",
+        desc: "10 min oppv · 8×2 min @ 4:50/km (1 min pause) · 10×1 min @ 4:40/km (30 sek pause) · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 8 km rolig",
+        desc: "8 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 7×1000 m",
+        desc: "10 min oppv · 7×1000 m @ 4:55/km · 60 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 16 km rolig langtur",
+        desc: "16 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 4
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 Fartslek 3×3+5×2+8×1 min",
+        desc: "3×3 min @ 4:55/km · 5×2 min @ 4:50/km · 8×1 min @ 4:45/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 8 km rolig",
+        desc: "8 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 2×3000 m",
+        desc: "10 min oppv · 2×3000 m @ 5:00–4:55/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 17 km rolig langtur",
+        desc: "17 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 5
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 10×3 min",
+        desc: "10 min oppv · 10×3 min @ 4:50/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 9 km rolig",
+        desc: "9 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 8×1000 m",
+        desc: "10 min oppv · 8×1000 m @ 4:55/km · 60 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 16 km progressiv langtur",
+        desc: "1–5 km rolig · fra km 5: 10 sek raskere per annenhver km · 5-6 @ 6:00, 7-8 @ 5:50, 9-10 @ 5:40, 11-12 @ 5:30, 13-14 @ 5:20, 15-16 @ 5:10/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 6
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 Fartslek 5×3-2-1 min",
+        desc: "5 serier: 3 min @ 4:55, 2 min @ 4:50, 1 min @ 4:45/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 9 km rolig",
+        desc: "9 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 3×3000 m",
+        desc: "10 min oppv · 3×3000 m @ 5:00–4:55/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 18 km rolig langtur",
+        desc: "18 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 7
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 10×2 min + 10×1 min",
+        desc: "10×2 min @ 4:50/km (1 min pause) · 10×1 min @ 4:40/km (30 sek pause) · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig",
+        desc: "10 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 10×1000 m",
+        desc: "10 min oppv · 10×1000 m @ 4:55/km · 60 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 18 km progressiv langtur",
+        desc: "1–5 km rolig · fra km 5: 10 sek raskere per annenhver km · slutter @ 5:10/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 8
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 Fartslek 7-6-5-4-3-2-1 min",
+        desc: "Oppv 10 min · 7 min @ 5:10, 6 min @ 5:05, 5 min @ 5:00, videre 5 sek raskere per drag → 1 min @ 4:40/km · 1 min pause",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 10 km rolig",
+        desc: "10 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 3×3000 m",
+        desc: "10 min oppv · 3×3000 m @ 5:00–4:55/km · 90 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 20 km rolig langtur",
+        desc: "20 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 9
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 12×3 min",
+        desc: "10 min oppv · 12×3 min @ 4:50/km · 1 min pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 11 km rolig",
+        desc: "11 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 12×1000 m",
+        desc: "10 min oppv · 12×1000 m @ 5:00–4:55/km · 60 sek pause · 5 min nedjogg",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 20 km progressiv langtur",
+        desc: "1–5 km rolig · fra km 5: 10 sek raskere per annenhver km → slutter @ 5:10/km",
+        intensity: "medium"
+      }]
+    },
+    // UKE 10
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 Fartslek 8-7-6-5-4-3-2-1 min",
+        desc: "Oppv 10 min · 8 min @ 5:10, 7 @ 5:05, 6 @ 5:00, videre 5 sek raskere per drag → 1 min @ 4:35/km · 1 min pause",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 12 km rolig",
+        desc: "12 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 4×3000 m",
+        desc: "10 min oppv · 4×3000 m @ 5:00–4:55/km · 90 sek pause – tøffeste økt i programmet!",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 22 km rolig langtur",
+        desc: "22 km rolig langtur",
+        intensity: "medium"
+      }]
+    },
+    // UKE 11
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 10 min + 10×2 min + 10 min",
+        desc: "Oppv 10 min · 10 min @ 5:00/km · 90 sek pause · 10×2 min @ 4:50/km (45 sek pause) · 90 sek pause · 10 min @ 5:00/km · nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 12 km rolig",
+        desc: "12 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "intervals",
+        label: "🏃 8×1000 m",
+        desc: "10 min oppv · 8×1000 m @ 4:55/km · 60 sek pause · formtoppingsøkt",
+        intensity: "hard"
+      }],
+      6: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      0: [{
+        type: "long",
+        label: "🏔️ 14 km rolig langtur",
+        desc: "14 km rolig – tapering begynner",
+        intensity: "medium"
+      }]
+    },
+    // UKE 12 – Løpsuke
+    {
+      1: [],
+      2: [{
+        type: "intervals",
+        label: "🏃 5×3 min + 5×2 min",
+        desc: "10 min oppv · 5×3 min @ 4:55/km + 5×2 min @ 4:50/km · 1 min pause · 10 min nedjogg",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "rest",
+        label: "😴 Fri / alternativ trening",
+        desc: "Hvile",
+        intensity: "rest"
+      }],
+      4: [{
+        type: "easy",
+        label: "🌿 6 km rolig",
+        desc: "6 km rolig løping",
+        intensity: "easy"
+      }],
+      5: [{
+        type: "rest",
+        label: "😴 Fri",
+        desc: "Hvile – spar til løpet",
+        intensity: "rest"
+      }],
+      6: [{
+        type: "easy",
+        label: "🌿 4 km rolig",
+        desc: "4 km lett løping – rist ut nervene",
+        intensity: "easy"
+      }],
+      0: [{
+        type: "race",
+        label: "🏆 LØPSDAG – Halvmaraton!",
+        desc: "Hold 5:00/km de første km. Jevnt tempo første halvdel. Øk heller farten de siste 5–6 km!",
+        intensity: "hard"
+      }]
+    }]
+  }
+};
+function getProgramSession(progKey, startDate, dateStr) {
+  const prog = PROGRAMS[progKey];
+  if (!prog || prog.isAuto || !startDate || !dateStr) return null;
+  const daysDiff = Math.round((new Date(dateStr + "T00:00:00") - new Date(startDate + "T00:00:00")) / 86400000);
+  if (daysDiff < 0) return null;
+  const weekIdx = Math.floor(daysDiff / 7);
+  if (weekIdx >= prog.weeks.length) return null;
+  const weekPlan = prog.weeks[weekIdx];
+  return weekPlan[dow(dateStr)] || [];
+}
+function getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, dateStr) {
+  if (plannedSessions[dateStr] !== undefined) return plannedSessions[dateStr];
+  const prog = prefs?.program || "auto";
+  if (prog !== "auto") {
+    const result = getProgramSession(prog, prefs?.programStartDate, dateStr);
+    if (result !== null) return result;
+  }
+  return getGoalSuggestions(goals, profile, prefs, dateStr);
+}
+
 // ─── PERIODIZATION ENGINE ─────────────────────────────────────────────────────
 function parseTargetPace(goal) {
   if (!goal.targetTime || !goal.distanceKm) return null;
@@ -1084,7 +2084,7 @@ function DashboardTab({
 }) {
   const today = todayStr(),
     d = dow(today);
-  const todayPlans = plannedSessions[today] !== undefined ? plannedSessions[today] : getGoalSuggestions(goals, profile, prefs, today);
+  const todayPlans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, today);
   const todaySessions = sessions.filter(s => s.date === today);
   const todayMorning = morningData[today] || {};
   const [saving, setSaving] = React.useState(false);
@@ -1559,8 +2559,7 @@ function CalendarTab({
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   }
   function getPlans(date) {
-    const d = dow(date);
-    return plannedSessions[date] !== undefined ? plannedSessions[date] : getGoalSuggestions(goals, profile, prefs, date);
+    return getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, date);
   }
   function getDone(date) {
     return sessions.filter(s => s.date === date);
@@ -3667,6 +4666,77 @@ function ProfileTab({
     })),
     placeholder: "65"
   }))), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "\uD83D\uDCC5 TRENINGSPROGRAM"), /*#__PURE__*/React.createElement(Sel, {
+    label: "Velg treningsprogram",
+    value: prefs?.program || "auto",
+    onChange: v => setPrefs(p => ({
+      ...p,
+      program: v
+    }), userId),
+    options: Object.entries(PROGRAMS).map(([k, v]) => ({
+      value: k,
+      label: v.name
+    }))
+  }), prefs?.program && prefs.program !== "auto" ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      background: C.bg,
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 10
+    }
+  }, PROGRAMS[prefs.program]?.desc), /*#__PURE__*/React.createElement(Inp, {
+    label: "Startdato for uke 1 (mandag)",
+    type: "date",
+    value: prefs?.programStartDate || "",
+    onChange: v => setPrefs(p => ({
+      ...p,
+      programStartDate: v
+    }), userId),
+    placeholder: "\xC5\xC5\xC5\xC5-MM-DD"
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      background: C.bg,
+      borderRadius: 8,
+      padding: 10
+    }
+  }, "Sett startdato til ", /*#__PURE__*/React.createElement("b", null, "mandagen i uke 1"), ". Riktig \xF8kt vises automatisk for hver dag.", prefs?.programStartDate && (() => {
+    const wk = Math.floor((new Date() - new Date(prefs.programStartDate + "T00:00:00")) / (7 * 86400000)) + 1;
+    const prog = PROGRAMS[prefs.program];
+    if (wk >= 1 && prog && wk <= prog.weeks?.length) return /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.green,
+        fontWeight: 700
+      }
+    }, " N\xE5: uke ", wk, " av ", prog.weeks.length, ".");
+    if (wk > prog?.weeks?.length) return /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted
+      }
+    }, " Programmet er fullf\xF8rt!");
+    return null;
+  })())) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      background: C.bg,
+      borderRadius: 8,
+      padding: 10
+    }
+  }, "Plan genereres automatisk fra dine m\xE5l og pulssoner. Velg et program over for \xE5 f\xF8lge et fast opplegg.")), (!prefs?.program || prefs.program === "auto") && /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 12
     }
