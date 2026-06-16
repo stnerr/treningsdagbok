@@ -157,8 +157,20 @@ function calcPace(km, min) {
   const p = parseFloat(min) / parseFloat(km);
   return fmtPace(p) || "";
 }
-function typeLabel(t) {
-  return t === "intervals" ? "🏃 Intervaller" : t === "easy" ? "🌿 Rolig jogging" : t === "long" ? "🏔️ Langtur" : t === "bike" ? "🚴 Sykkel" : t === "strength" ? "💪 Styrke" : t === "alt" ? "🏊 Alternativt" : t === "race" ? "🏆 Løp/Konkurranse" : "😴 Hvile";
+// GAP: grade-adjusted pace (~3.3% per 1% grade)
+function calcGAP(pace, elevM, distKm) {
+  if (!pace || !elevM || !distKm) return null;
+  const grade = parseFloat(elevM) / parseFloat(distKm) / 10;
+  const factor = 1 - grade * 0.033;
+  const adj = parsePace(pace) * factor;
+  return adj > 0 ? fmtPace(adj) : null;
+}
+// HAP: heat-adjusted pace (~5 sec/km per degree above 15°C)
+function calcHAP(pace, tempC) {
+  if (!pace || !tempC) return null;
+  const excess = Math.max(0, parseFloat(tempC) - 15);
+  const adj = parsePace(pace) - excess * 0.083;
+  return adj > 0 ? fmtPace(adj) : null;
 }
 function intensityColor(i) {
   return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
@@ -1712,11 +1724,35 @@ function CalendarTab({
         fontSize: 12,
         color: C.muted
       }
-    }, s.desc)), /*#__PURE__*/React.createElement(Btn, {
+    }, s.desc)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 4
+      }
+    }, /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => {
+        const toDate = prompt("Flytt økt til (ÅÅÅÅ-MM-DD):");
+        if (!toDate || !toDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          return;
+        }
+        const moved = s;
+        setEditSessions(p => p.filter((_, idx) => idx !== i));
+        setPlannedSessions(p => ({
+          ...p,
+          [toDate]: [...getPlans(toDate), moved],
+          [selDate]: editSessions.filter((_, idx) => idx !== i)
+        }), userId);
+      },
+      small: true,
+      color: C.yellow,
+      style: {
+        fontSize: 14
+      }
+    }, "\u2194"), /*#__PURE__*/React.createElement(Btn, {
       onClick: () => setEditSessions(p => p.filter((_, idx) => idx !== i)),
       small: true,
       color: C.red
-    }, "\u2715"))), showAdd ? /*#__PURE__*/React.createElement("div", {
+    }, "\u2715")))), showAdd ? /*#__PURE__*/React.createElement("div", {
       style: {
         background: C.bg,
         borderRadius: 12,
@@ -2068,37 +2104,326 @@ function CalendarTab({
   }), label))), selDate && /*#__PURE__*/React.createElement(EditModal, null));
 }
 
+// ─── INTERVAL BUILDER ────────────────────────────────────────────────────────
+function IntervalBuilder({
+  intervals,
+  onChange
+}) {
+  const [bStr, setBStr] = React.useState("");
+  const [bErr, setBErr] = React.useState("");
+  function parseAndAdd() {
+    setBErr("");
+    const s = bStr.trim();
+    // "AxBxCsek" – A serier × B drag × C sek
+    const m3 = s.match(/(\d+)\s*[x×]\s*(\d+)\s*[x×]\s*(\d+)\s*(?:sek|s)/i);
+    if (m3) {
+      const newIvs = [];
+      for (let si = 0; si < parseInt(m3[1]); si++) {
+        for (let ri = 0; ri < parseInt(m3[2]); ri++) newIvs.push({
+          dur: m3[3] + " sek",
+          pace: "",
+          hr: "",
+          elev: ""
+        });
+        if (si < parseInt(m3[1]) - 1) newIvs.push({
+          dur: "2 min",
+          pace: "",
+          hr: "",
+          elev: "",
+          isPause: true
+        });
+      }
+      onChange([...intervals, ...newIvs]);
+      setBStr("");
+      return;
+    }
+    // "AxB min/km/m/sek"
+    const m2 = s.match(/(\d+)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(min|km|m|sek|s)/i);
+    if (m2) {
+      const newIvs = Array.from({
+        length: parseInt(m2[1])
+      }, () => ({
+        dur: `${m2[2]} ${m2[3]}`,
+        pace: "",
+        hr: "",
+        elev: ""
+      }));
+      onChange([...intervals, ...newIvs]);
+      setBStr("");
+      return;
+    }
+    setBErr("Format: 5x8min · 3x10x45sek · 4x1km");
+  }
+  function upd(i, f, v) {
+    const a = [...intervals];
+    a[i] = {
+      ...a[i],
+      [f]: v
+    };
+    onChange(a);
+  }
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "DRAG / SERIER"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginBottom: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: bStr,
+    onChange: e => setBStr(e.target.value),
+    onKeyDown: e => e.key === "Enter" && parseAndAdd(),
+    placeholder: "f.eks. 5x8min \xB7 3x10x45sek \xB7 4x1km",
+    style: {
+      flex: 1,
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "7px 10px",
+      fontSize: 13,
+      color: C.text,
+      outline: "none"
+    }
+  }), /*#__PURE__*/React.createElement(Btn, {
+    onClick: parseAndAdd,
+    small: true,
+    color: C.accent
+  }, "Legg til")), bErr && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.red,
+      marginBottom: 6
+    }
+  }, bErr), intervals.map((iv, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      display: "flex",
+      gap: 4,
+      marginBottom: 5,
+      alignItems: "flex-end",
+      background: iv.isPause ? "#fef3c7" : "transparent",
+      borderRadius: 6,
+      padding: iv.isPause ? "4px 6px" : "0"
+    }
+  }, !iv.isPause && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: 20,
+      height: 20,
+      borderRadius: "50%",
+      background: C.accent + "22",
+      color: C.accent,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 10,
+      fontWeight: 700,
+      flexShrink: 0,
+      marginBottom: 2
+    }
+  }, i + 1), iv.isPause ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: C.yellow,
+      fontWeight: 600
+    }
+  }, "\u23F8 Pause:"), /*#__PURE__*/React.createElement("input", {
+    value: iv.dur,
+    onChange: e => upd(i, "dur", e.target.value),
+    style: {
+      background: "transparent",
+      border: "none",
+      fontSize: 12,
+      color: C.yellow,
+      fontWeight: 600,
+      outline: "none",
+      width: 80
+    },
+    placeholder: "2 min"
+  })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Varighet" : "",
+    value: iv.dur,
+    onChange: v => upd(i, "dur", v),
+    placeholder: "8 min",
+    style: {
+      marginBottom: 0,
+      fontSize: 12
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Tempo" : "",
+    value: iv.pace,
+    onChange: v => upd(i, "pace", v),
+    placeholder: "5:08",
+    style: {
+      marginBottom: 0,
+      fontSize: 12
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Puls" : "",
+    value: iv.hr,
+    onChange: v => upd(i, "hr", v),
+    placeholder: "bpm",
+    style: {
+      marginBottom: 0,
+      fontSize: 12,
+      width: 60
+    }
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: i === 0 ? "Stign m" : "",
+    value: iv.elev || "",
+    onChange: v => upd(i, "elev", v),
+    placeholder: "m",
+    style: {
+      marginBottom: 0,
+      fontSize: 12,
+      width: 54
+    }
+  }), iv.pace && iv.elev && iv.dur && (() => {
+    const distKm = iv.dur.includes("km") ? parseFloat(iv.dur) : null;
+    const gap = distKm ? calcGAP(iv.pace, iv.elev, distKm) : null;
+    return gap ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: C.accent,
+        whiteSpace: "nowrap",
+        paddingBottom: 10
+      }
+    }, "GAP ", gap) : null;
+  })()), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onChange(intervals.filter((_, idx) => idx !== i)),
+    small: true,
+    color: C.red,
+    style: {
+      marginBottom: 0,
+      padding: "4px 8px"
+    }
+  }, "\u2715"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onChange([...intervals, {
+      dur: "",
+      pace: "",
+      hr: "",
+      elev: ""
+    }]),
+    small: true,
+    color: C.accent,
+    outline: true
+  }, "+ Drag"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => onChange([...intervals, {
+      dur: "2 min",
+      pace: "",
+      hr: "",
+      elev: "",
+      isPause: true
+    }]),
+    small: true,
+    color: C.yellow,
+    outline: true
+  }, "+ Pause")));
+}
+
+// ─── SESSION ANALYSIS ─────────────────────────────────────────────────────────
+function analyzeSession(session, goals, profile) {
+  if (!session || !goals || !goals.length) return [];
+  const msgs = [];
+  const g = goals.find(x => daysUntil(x.date) > -30) || goals[0];
+  const racePace = parseTargetPace(g);
+  const maxHr = parseFloat(profile?.maxHr) || 185;
+  if (session.type === "intervals" && session.intervals?.length) {
+    const validDrags = session.intervals.filter(iv => iv.pace && parsePace(iv.pace) && !iv.isPause);
+    if (validDrags.length > 0 && racePace) {
+      const avgP = validDrags.reduce((a, iv) => a + parsePace(iv.pace), 0) / validDrags.length;
+      const diff = avgP - racePace;
+      if (diff < -0.1) msgs.push(`✅ Snitt drag-tempo ${fmtPace(avgP)}/km – ${Math.abs(diff * 60).toFixed(0)} sek/km raskere enn race-pace (${fmtPace(racePace)}/km)!`);else if (diff > 0.15) msgs.push(`⚠️ Snitt drag-tempo ${fmtPace(avgP)}/km – ${(diff * 60).toFixed(0)} sek/km saktere enn race-pace. Mål: ${fmtPace(racePace)}/km.`);else msgs.push(`✅ Drag-tempo (${fmtPace(avgP)}/km) er nær race-pace – god kontroll!`);
+      const paces = validDrags.map(iv => parsePace(iv.pace));
+      const spread = Math.max(...paces) - Math.min(...paces);
+      if (spread > 0.25) msgs.push(`⚡ Spredning mellom drag: ${(spread * 60).toFixed(0)} sek/km. Prøv jevnere uttak neste gang.`);else if (validDrags.length >= 3) msgs.push(`✅ Jevne drag – god intensitetsstyring.`);
+    }
+    const hrDrags = session.intervals.filter(iv => iv.hr && parseFloat(iv.hr) > 0 && !iv.isPause);
+    if (hrDrags.length > 0) {
+      const avgHr = hrDrags.reduce((a, iv) => a + parseFloat(iv.hr), 0) / hrDrags.length;
+      const pct = avgHr / maxHr * 100;
+      if (pct > 92) msgs.push(`🔴 Snittpuls på drag ${avgHr.toFixed(0)} bpm (${pct.toFixed(0)}% av maks) – svært høy.`);else if (pct < 75) msgs.push(`💡 Snittpuls drag ${avgHr.toFixed(0)} bpm (${pct.toFixed(0)}%) – du kan pushe mer.`);else msgs.push(`✅ Pulssone på drag (${avgHr.toFixed(0)} bpm / ${pct.toFixed(0)}%) er riktig.`);
+    }
+    // GAP-analyse på drag
+    const gapDrags = session.intervals.filter(iv => iv.pace && iv.elev && iv.dur && !iv.isPause);
+    if (gapDrags.length > 0) {
+      const dragWithGap = gapDrags.map(iv => {
+        const distKm = iv.dur.includes("km") ? parseFloat(iv.dur) : null;
+        return distKm ? calcGAP(iv.pace, iv.elev, distKm) : null;
+      }).filter(Boolean);
+      if (dragWithGap.length > 0) msgs.push(`📐 GAP-justert snitt drag: ${fmtPace(dragWithGap.reduce((a, p) => a + parsePace(p), 0) / dragWithGap.length)}/km.`);
+    }
+  } else if (session.avgPace && racePace) {
+    const p = parsePace(session.avgPace);
+    if (p && session.type === "easy" && p < racePace * 1.05) msgs.push(`⚠️ Rolig økt (${session.avgPace}/km) gikk for raskt. Sone 2: ${fmtPace(racePace * 1.18)}/km eller roligere.`);else if (p && session.type === "long") {
+      const pk = parseFloat(g.distanceKm || 21) >= 40 ? 33 : 23;
+      if (parseFloat(session.km) >= pk * 0.85) msgs.push(`🏆 Sterk langtur (${session.km}km)!`);
+    }
+  }
+  if (session.avgHr && session.type === "easy") {
+    const pct = parseFloat(session.avgHr) / maxHr * 100;
+    if (pct > 75) msgs.push(`⚠️ Puls ${session.avgHr} bpm (${pct.toFixed(0)}%) – for høy for rolig økt.`);
+  }
+  if (session.gap) msgs.push(`📐 GAP (høydejustert): ${session.gap}/km vs flat ${session.avgPace}/km.`);
+  if (session.hap) msgs.push(`🌡 HAP (varmejustert): ${session.hap}/km.`);
+  if (!msgs.length) msgs.push(`Økt loggført${session.rpe ? ` (RPE ${session.rpe}/10)` : ""} 💪`);
+  return msgs;
+}
+
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
 function LogTab({
   sessions,
   setSessions,
   goals,
+  profile,
   userId
 }) {
   const today = todayStr();
-  const [form, setForm] = React.useState({
+  const emptyForm = {
     date: today,
     type: "easy",
     km: "",
     totalTime: "",
     avgPace: "",
+    gap: "",
+    hap: "",
     avgHr: "",
     maxHr: "",
     temp: "",
     humidity: "",
+    elevGain: "",
     notes: "",
     rpe: "5",
-    intervals: [{
-      dur: "",
-      pace: "",
-      hr: "",
-      dist: ""
-    }]
-  });
+    intervals: []
+  };
+  const [form, setForm] = React.useState(emptyForm);
   const [saved, setSaved] = React.useState(false);
   const [editId, setEditId] = React.useState(null);
+  const [expandedId, setExpandedId] = React.useState(null);
 
-  // Auto-calculate pace
+  // Auto-calc pace from km+time
   React.useEffect(() => {
     const p = calcPace(form.km, form.totalTime);
     if (p) setForm(f => ({
@@ -2106,6 +2431,24 @@ function LogTab({
       avgPace: p
     }));
   }, [form.km, form.totalTime]);
+
+  // Auto-calc GAP and HAP when pace/elev/temp change
+  React.useEffect(() => {
+    if (form.avgPace && form.elevGain && form.km) {
+      const g = calcGAP(form.avgPace, form.elevGain, form.km);
+      setForm(f => ({
+        ...f,
+        gap: g || ""
+      }));
+    }
+    if (form.avgPace && form.temp) {
+      const h = calcHAP(form.avgPace, form.temp);
+      setForm(f => ({
+        ...f,
+        hap: h || ""
+      }));
+    }
+  }, [form.avgPace, form.elevGain, form.km, form.temp]);
   function save() {
     if (!form.date || !form.type) return;
     setSessions(p => [...p.filter(s => s.id !== form.id), {
@@ -2114,58 +2457,25 @@ function LogTab({
     }].sort((a, b) => b.date.localeCompare(a.date)), userId);
     setSaved(true);
     setEditId(null);
-    setForm({
-      date: today,
-      type: "easy",
-      km: "",
-      totalTime: "",
-      avgPace: "",
-      avgHr: "",
-      maxHr: "",
-      temp: "",
-      humidity: "",
-      notes: "",
-      rpe: "5",
-      intervals: [{
-        dur: "",
-        pace: "",
-        hr: "",
-        dist: ""
-      }]
-    });
+    setForm(emptyForm);
     setTimeout(() => setSaved(false), 2000);
   }
-  function editSession(s) {
+  function startEdit(s) {
     setForm({
+      ...emptyForm,
       ...s,
-      intervals: s.intervals?.length ? s.intervals : [{
-        dur: "",
-        pace: "",
-        hr: "",
-        dist: ""
-      }]
+      intervals: s.intervals?.length ? s.intervals : []
     });
     setEditId(s.id);
     window.scrollTo(0, 0);
   }
+  function cancelEdit() {
+    setEditId(null);
+    setForm(emptyForm);
+  }
   function deleteSession(id) {
     if (window.confirm("Slette denne økten?")) setSessions(p => p.filter(s => s.id !== id), userId);
   }
-  function updInt(i, f, v) {
-    setForm(p => {
-      const a = [...p.intervals];
-      a[i] = {
-        ...a[i],
-        [f]: v
-      };
-      return {
-        ...p,
-        intervals: a
-      };
-    });
-  }
-
-  // Goal feedback on logged session
   const primaryGoal = goals.find(g => daysUntil(g.date) > -7);
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     style: {
@@ -2173,7 +2483,7 @@ function LogTab({
       fontWeight: 800,
       marginBottom: 16
     }
-  }, editId ? "Rediger økt" : "Loggfør økt"), /*#__PURE__*/React.createElement(Card, {
+  }, editId ? "✎ Rediger økt" : "Loggfør økt"), /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 16
     }
@@ -2241,7 +2551,7 @@ function LogTab({
       padding: "8px 12px",
       color: form.avgPace ? C.accent : C.muted,
       fontSize: 14,
-      fontWeight: form.avgPace ? 700 : 400
+      fontWeight: 700
     }
   }, form.avgPace || "–"))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -2274,14 +2584,32 @@ function LogTab({
       temp: v
     }))
   }), /*#__PURE__*/React.createElement(Inp, {
-    label: "Fukt %",
+    label: "H\xF8ydem. m",
     type: "number",
-    value: form.humidity,
+    value: form.elevGain,
     onChange: v => setForm(p => ({
       ...p,
-      humidity: v
+      elevGain: v
     }))
-  })), /*#__PURE__*/React.createElement("div", {
+  })), (form.gap || form.hap) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.bg,
+      borderRadius: 8,
+      padding: "8px 12px",
+      marginBottom: 12,
+      fontSize: 13
+    }
+  }, form.gap && /*#__PURE__*/React.createElement("div", null, "\uD83D\uDCD0 ", /*#__PURE__*/React.createElement("b", null, "GAP"), " (h\xF8ydejustert): ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.accent,
+      fontWeight: 700
+    }
+  }, form.gap, "/km")), form.hap && /*#__PURE__*/React.createElement("div", null, "\uD83C\uDF21 ", /*#__PURE__*/React.createElement("b", null, "HAP"), " (varmejustert): ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: C.orange,
+      fontWeight: 700
+    }
+  }, form.hap, "/km"))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 12
     }
@@ -2317,87 +2645,13 @@ function LogTab({
       border: `1.5px solid ${form.rpe === String(n) ? n <= 3 ? C.green : n <= 6 ? C.yellow : C.red : C.border}`,
       color: form.rpe === String(n) ? n <= 3 ? C.green : n <= 6 ? C.yellow : C.red : C.muted
     }
-  }, n)))), form.type === "intervals" && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: C.accent,
-      fontWeight: 700,
-      marginBottom: 8
-    }
-  }, "DRAG"), form.intervals.map((iv, i) => /*#__PURE__*/React.createElement("div", {
-    key: i,
-    style: {
-      display: "flex",
-      gap: 6,
-      marginBottom: 6,
-      alignItems: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 22,
-      height: 22,
-      borderRadius: "50%",
-      background: C.accent + "22",
-      color: C.accent,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: 11,
-      fontWeight: 700,
-      flexShrink: 0,
-      marginBottom: 2
-    }
-  }, i + 1), /*#__PURE__*/React.createElement(Inp, {
-    label: i === 0 ? "Min" : "",
-    value: iv.dur,
-    onChange: v => updInt(i, "dur", v),
-    placeholder: "min",
-    style: {
-      marginBottom: 0
-    }
-  }), /*#__PURE__*/React.createElement(Inp, {
-    label: i === 0 ? "Tempo" : "",
-    value: iv.pace,
-    onChange: v => updInt(i, "pace", v),
-    placeholder: "5:08",
-    style: {
-      marginBottom: 0
-    }
-  }), /*#__PURE__*/React.createElement(Inp, {
-    label: i === 0 ? "Puls" : "",
-    value: iv.hr,
-    onChange: v => updInt(i, "hr", v),
-    placeholder: "bpm",
-    style: {
-      marginBottom: 0
-    }
-  }), form.intervals.length > 1 && /*#__PURE__*/React.createElement(Btn, {
-    onClick: () => setForm(p => ({
+  }, n)))), form.type === "intervals" && /*#__PURE__*/React.createElement(IntervalBuilder, {
+    intervals: form.intervals,
+    onChange: v => setForm(p => ({
       ...p,
-      intervals: p.intervals.filter((_, idx) => idx !== i)
-    })),
-    small: true,
-    color: C.red,
-    style: {
-      marginBottom: 0
-    }
-  }, "\u2715"))), /*#__PURE__*/React.createElement(Btn, {
-    onClick: () => setForm(p => ({
-      ...p,
-      intervals: [...p.intervals, {
-        dur: "",
-        pace: "",
-        hr: "",
-        dist: ""
-      }]
-    })),
-    small: true,
-    color: C.accent
-  }, "+ Drag")), /*#__PURE__*/React.createElement(Txta, {
+      intervals: v
+    }))
+  }), /*#__PURE__*/React.createElement(Txta, {
     label: "Notater",
     value: form.notes,
     onChange: v => setForm(p => ({
@@ -2405,7 +2659,7 @@ function LogTab({
       notes: v
     })),
     rows: 3,
-    placeholder: "Hvordan f\xF8ltes det?"
+    placeholder: "Hvordan f\xF8ltes det? Teknikk, v\xE6r, form..."
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -2417,29 +2671,8 @@ function LogTab({
     style: {
       flex: 1
     }
-  }, saved ? "✓ Lagret!" : editId ? "Oppdater" : "Lagre økt"), editId && /*#__PURE__*/React.createElement(Btn, {
-    onClick: () => {
-      setEditId(null);
-      setForm({
-        date: today,
-        type: "easy",
-        km: "",
-        totalTime: "",
-        avgPace: "",
-        avgHr: "",
-        maxHr: "",
-        temp: "",
-        humidity: "",
-        notes: "",
-        rpe: "5",
-        intervals: [{
-          dur: "",
-          pace: "",
-          hr: "",
-          dist: ""
-        }]
-      });
-    },
+  }, saved ? "✓ Lagret!" : editId ? "Oppdater økt" : "Lagre økt"), editId && /*#__PURE__*/React.createElement(Btn, {
+    onClick: cancelEdit,
     small: true,
     color: C.muted
   }, "Avbryt"))), sessions.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
@@ -2450,9 +2683,8 @@ function LogTab({
       marginBottom: 10
     }
   }, "HISTORIKK"), sessions.map(s => {
-    const racePace = primaryGoal ? parseTargetPace(primaryGoal) : null;
-    const sPace = s.avgPace ? parsePace(s.avgPace) : null;
-    const paceVsGoal = racePace && sPace && s.type === "intervals" ? sPace - racePace : null;
+    const isExpanded = expandedId === s.id;
+    const feedback = goals.length ? analyzeSession(s, goals, profile) : [];
     return /*#__PURE__*/React.createElement(Card, {
       key: s.id,
       style: {
@@ -2466,8 +2698,10 @@ function LogTab({
       }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        flex: 1
-      }
+        flex: 1,
+        cursor: "pointer"
+      },
+      onClick: () => setExpandedId(isExpanded ? null : s.id)
     }, /*#__PURE__*/React.createElement("div", {
       style: {
         fontWeight: 700,
@@ -2484,33 +2718,107 @@ function LogTab({
         color: C.accent,
         marginTop: 2
       }
-    }, s.km, "km", s.avgPace ? ` · ${s.avgPace}/km` : "", s.avgHr ? ` · ${s.avgHr}bpm` : ""), paceVsGoal !== null && /*#__PURE__*/React.createElement("div", {
+    }, s.km, "km", s.avgPace ? ` · ${s.avgPace}/km` : "", s.gap ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.green
+      }
+    }, " \xB7 GAP ", s.gap) : "", s.hap ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.orange
+      }
+    }, " \xB7 HAP ", s.hap) : "", s.avgHr ? ` · ${s.avgHr}bpm` : "", s.elevGain ? ` · ↑${s.elevGain}m` : ""), feedback.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: paceVsGoal < 0 ? C.green : paceVsGoal > 0.1 ? C.red : C.yellow,
+        color: feedback[0].startsWith("⚠️") || feedback[0].startsWith("🔴") ? C.red : feedback[0].startsWith("✅") || feedback[0].startsWith("🏆") ? C.green : C.muted,
         marginTop: 2
       }
-    }, paceVsGoal < 0 ? `${Math.abs(paceVsGoal * 60).toFixed(0)}s/km raskere enn race-pace ✅` : `${(paceVsGoal * 60).toFixed(0)}s/km saktere enn race-pace`), s.notes && /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 12,
-        color: C.muted,
-        marginTop: 2
-      }
-    }, s.notes.slice(0, 60), s.notes.length > 60 ? "..." : "")), /*#__PURE__*/React.createElement("div", {
+    }, feedback[0])), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 6,
         flexShrink: 0
       }
     }, /*#__PURE__*/React.createElement(Btn, {
-      onClick: () => editSession(s),
+      onClick: () => startEdit(s),
       small: true,
       color: C.accent
     }, "\u270E"), /*#__PURE__*/React.createElement(Btn, {
       onClick: () => deleteSession(s.id),
       small: true,
       color: C.red
-    }, "\u2715"))));
+    }, "\u2715"))), isExpanded && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 10,
+        paddingTop: 10,
+        borderTop: `1px solid ${C.border}`
+      }
+    }, feedback.length > 1 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginBottom: 8
+      }
+    }, feedback.map((m, i) => /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        fontSize: 12,
+        color: m.startsWith("⚠️") || m.startsWith("🔴") ? C.red : m.startsWith("✅") || m.startsWith("🏆") ? C.green : C.text,
+        padding: "2px 0"
+      }
+    }, m))), s.intervals?.filter(iv => !iv.isPause).length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.accent,
+        fontWeight: 700,
+        marginBottom: 6
+      }
+    }, "DRAG"), s.intervals.map((iv, i) => iv.isPause ? /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        fontSize: 11,
+        color: C.yellow,
+        padding: "2px 0"
+      }
+    }, "\u23F8 Pause: ", iv.dur) : /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        display: "flex",
+        gap: 12,
+        padding: "4px 0",
+        borderBottom: `1px solid ${C.border}`,
+        fontSize: 12
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted,
+        minWidth: 30
+      }
+    }, "#", i + 1), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontWeight: 600
+      }
+    }, iv.dur), iv.pace && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.accent
+      }
+    }, iv.pace, "/km"), iv.hr && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.red
+      }
+    }, iv.hr, "bpm"), iv.elev && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.green
+      }
+    }, "\u2191", iv.elev, "m"), iv.pace && iv.elev && iv.dur && iv.dur.includes("km") && calcGAP(iv.pace, iv.elev, parseFloat(iv.dur)) && /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.muted
+      }
+    }, "GAP ", calcGAP(iv.pace, iv.elev, parseFloat(iv.dur)))))), s.notes && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.muted,
+        marginTop: 6,
+        whiteSpace: "pre-wrap"
+      }
+    }, s.notes)));
   })));
 }
 
@@ -3772,6 +4080,7 @@ function App() {
       sessions: sessions,
       setSessions: setSessions,
       goals: goals,
+      profile: profile,
       userId: userId
     }),
     strength: /*#__PURE__*/React.createElement(StrengthTab, {
