@@ -1612,7 +1612,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
       type: "easy",
       intensity: "easy",
       label: "🌿 Lett jogging",
-      desc: `20 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls maks ${z2.hi}`
+      desc: `20 min${easyPace ? " · " + easyPace + "/km" : ""} · Puls maks ${z2.hi}`
     }];
   }
   if (phase === "taper") {
@@ -1632,7 +1632,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
       type: "easy",
       intensity: "easy",
       label: "🌿 Rolig jogging",
-      desc: `30–40 min${easyPace ? ` · ${easyPace}/km` : ""} · Puls maks ${z2.hi}`
+      desc: `30–40 min${easyPace ? " · " + easyPace + "/km" : ""} · Puls maks ${z2.hi}`
     }];
   }
   if (d === longDay) return [{
@@ -1647,7 +1647,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
     type: "easy",
     intensity: "easy",
     label: "🌿 Rolig jogging",
-    desc: `${phase === "peak" ? "50–60" : "45–55"} min${easyPace ? ` · ${easyPace}/km` : ""} · Puls: ${z2.lo}–${z2.hi}`
+    desc: `${phase === "peak" ? "50–60" : "45–55"} min${easyPace ? " · " + easyPace + "/km" : ""} · Puls: ${z2.lo}–${z2.hi}`
   }];
   return [];
 }
