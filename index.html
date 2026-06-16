@@ -1568,22 +1568,22 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
     type: "intervals",
     intensity: "hard",
     label: "🏃 Langt terskel",
-    desc: `${isMarathon ? 4 : 5}×${isMarathon ? 10 : 8} min${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z4.lo}–${z4.hi} · 2 min pause`
+    desc: `${isMarathon ? 4 : 5}×${isMarathon ? 10 : 8} min${threshPace ? " · " + threshPace + "/km" : ""} · Puls: ${z4.lo}–${z4.hi} · 2 min pause`
   }), () => ({
     type: "intervals",
     intensity: "hard",
     label: "🏃 Tempodrager",
-    desc: `${isMarathon ? 3 : 4}×${isMarathon ? "2 km" : "1.5 km"} race-tempo${racePaceStr ? ` · ${racePaceStr}/km` : ""} · Puls: ${z4.lo}–${z4.hi} · 90 sek pause`
+    desc: `${isMarathon ? 3 : 4}×${isMarathon ? "2 km" : "1.5 km"} race-tempo${racePaceStr ? " · " + racePaceStr + "/km" : ""} · Puls: ${z4.lo}–${z4.hi} · 90 sek pause`
   }), () => ({
     type: "intervals",
     intensity: "hard",
     label: "🏃 Kortintervaller",
-    desc: `${isMarathon ? 8 : 10}×400 m${racePace ? ` · ~${fmtPace(racePace * .93)}/km` : ""} · Puls: ${z4.hi}–${z5.hi} · 90 sek pause`
+    desc: `${isMarathon ? 8 : 10}×400 m${racePace ? " · ~" + fmtPace(racePace * .93) + "/km" : ""} · Puls: ${z4.hi}–${z5.hi} · 90 sek pause`
   }), () => ({
     type: "intervals",
     intensity: "hard",
     label: "🏃 Dobbel terskel",
-    desc: `${isMarathon ? 6 : 7}×5 min${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z3.hi}–${z4.hi} · 1 min pause`
+    desc: `${isMarathon ? 6 : 7}×5 min${threshPace ? " · " + threshPace + "/km" : ""} · Puls: ${z3.hi}–${z4.hi} · 1 min pause`
   })];
   const monInt = intSessions[rot]();
   const thuInt = intSessions[(rot + 2) % 4]();
@@ -1600,7 +1600,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
       type: "race",
       intensity: "hard",
       label: `🏆 ${primary.name}!`,
-      desc: `Løpsdag! Mål: ${primary.targetTime || ""}${racePaceStr ? ` · ${racePaceStr}/km` : ""}`
+      desc: `Løpsdag! Mål: ${primary.targetTime || ""}${racePaceStr ? " · " + racePaceStr + "/km" : ""}`
     }];
     if (hardDays[0] === d) return [{
       type: "intervals",
@@ -1620,13 +1620,13 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
       type: "long",
       intensity: "medium",
       label: "🏔️ Kortere langtur",
-      desc: `${longRunKm} km${longPace ? ` · ${longPace}/km` : ""} · Puls: ${z2.lo}–${z2.hi}`
+      desc: `${longRunKm} km${longPace ? " · " + longPace + "/km" : ""} · Puls: ${z2.lo}–${z2.hi}`
     }];
     if (hardDays[0] === d) return [{
       type: "intervals",
       intensity: "hard",
       label: "🏃 Terskel (kort)",
-      desc: `3×8 min${threshPace ? ` · ${threshPace}/km` : ""} · Puls: ${z4.lo}–${z4.hi}`
+      desc: `3×8 min${threshPace ? " · " + threshPace + "/km" : ""} · Puls: ${z4.lo}–${z4.hi}`
     }];
     return [{
       type: "easy",
@@ -1639,7 +1639,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
     type: "long",
     intensity: "medium",
     label: "🏔️ Langtur",
-    desc: `${longRunKm} km${longPace ? ` · ${longPace}/km` : ""} · Puls: ${z2.lo}–${z2.hi}${secNote}`
+    desc: `${longRunKm} km${longPace ? " · " + longPace + "/km" : ""} · Puls: ${z2.lo}–${z2.hi}${secNote}`
   }];
   if (d === hardDays[0]) return [monInt];
   if (d === hardDays[1]) return [thuInt];
@@ -2684,7 +2684,7 @@ function CalendarTab({
         color: C.green,
         fontWeight: 600
       }
-    }, "\u2713 ", typeLabel(s.type), s.km ? ` · ${s.km}km` : "", s.avgPace ? ` · ${s.avgPace}/km` : ""))), /*#__PURE__*/React.createElement("div", {
+    }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : ""))), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.muted,
@@ -2929,7 +2929,7 @@ function CalendarTab({
           fontSize: 12,
           color: C.green
         }
-      }, "\u2713 ", typeLabel(s.type), s.km ? ` · ${s.km}km` : ""))), /*#__PURE__*/React.createElement("span", {
+      }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : ""))), /*#__PURE__*/React.createElement("span", {
         style: {
           color: C.muted,
           fontSize: 18
@@ -3387,7 +3387,7 @@ function analyzeSession(session, goals, profile) {
   }
   if (session.gap) msgs.push(`📐 GAP (høydejustert): ${session.gap}/km vs flat ${session.avgPace}/km.`);
   if (session.hap) msgs.push(`🌡 HAP (varmejustert): ${session.hap}/km.`);
-  if (!msgs.length) msgs.push(`Økt loggført${session.rpe ? ` (RPE ${session.rpe}/10)` : ""} 💪`);
+  if (!msgs.length) msgs.push(`Økt loggført${session.rpe ? " (RPE " + session.rpe + "/10)" : ""} 💪`);
   return msgs;
 }
 
@@ -3717,7 +3717,7 @@ function LogTab({
         color: C.accent,
         marginTop: 2
       }
-    }, s.km, "km", s.avgPace ? ` · ${s.avgPace}/km` : "", s.gap ? /*#__PURE__*/React.createElement("span", {
+    }, s.km, "km", s.avgPace ? " · " + s.avgPace + "/km" : "", s.gap ? /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.green
       }
@@ -3725,7 +3725,7 @@ function LogTab({
       style: {
         color: C.orange
       }
-    }, " \xB7 HAP ", s.hap) : "", s.avgHr ? ` · ${s.avgHr}bpm` : "", s.elevGain ? ` · ↑${s.elevGain}m` : ""), feedback.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, " \xB7 HAP ", s.hap) : "", s.avgHr ? " · " + s.avgHr + "bpm" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : ""), feedback.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: feedback[0].startsWith("⚠️") || feedback[0].startsWith("🔴") ? C.red : feedback[0].startsWith("✅") || feedback[0].startsWith("🏆") ? C.green : C.muted,
