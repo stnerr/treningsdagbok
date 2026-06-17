@@ -1542,7 +1542,7 @@ function getGoalSuggestions(goals, profile, prefs, dateStr) {
   const isMarathon = dist >= 40,
     isHalf = dist >= 18 && dist < 40;
   const racePace = parseTargetPace(primary);
-  const threshPace = racePace ? fmtPace(racePace * (isMarathon ? .98 : 1.03)) : null;
+  const threshPace = racePace ? fmtPace(racePace * (isMarathon ? 0.98 : 1.03)) : null;
   const easyPace = racePace ? fmtPace(racePace * 1.20) : null;
   const longPace = racePace ? fmtPace(racePace * (isMarathon ? 1.12 : 1.15)) : null;
   const racePaceStr = racePace ? fmtPace(racePace) : null;
