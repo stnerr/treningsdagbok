@@ -175,6 +175,9 @@ function calcHAP(pace, tempC) {
 function intensityColor(i) {
   return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
 }
+function typeLabel(t) {
+  return t === "intervals" ? "🏃 Intervaller" : t === "easy" ? "🌿 Rolig jogging" : t === "long" ? "🏔️ Langtur" : t === "race" ? "🏆 Løp/Konkurranse" : t === "bike" ? "🚴 Sykkel" : t === "strength" ? "💪 Styrke" : t === "alt" ? "🏊 Alternativt" : t === "rest" ? "😴 Hvile" : t || "";
+}
 const SESSION_OPTS = [{
   value: "intervals",
   label: "🏃 Intervaller"
