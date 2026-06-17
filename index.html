@@ -2528,10 +2528,11 @@ function DashboardTab({
 }
 
 // ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
-function CalendarTab({
+function PlanCalendarView({
   plannedSessions,
   setPlannedSessions,
   sessions,
+  setSessions,
   goals,
   profile,
   prefs,
@@ -3391,8 +3392,8 @@ function analyzeSession(session, goals, profile) {
   return msgs;
 }
 
-// ─── LOG TAB ──────────────────────────────────────────────────────────────────
-function LogTab({
+// ─── LOG VIEW ──────────────────────────────────────────────────────────────────
+function LogView({
   sessions,
   setSessions,
   goals,
@@ -3821,7 +3822,63 @@ function LogTab({
   })));
 }
 
-// ─── STRENGTH TAB ─────────────────────────────────────────────────────────────
+// ─── COMBINED CALENDAR + LOG TAB ────────────────────────────────────────────────
+function CalendarTab(props) {
+  const [mainTab, setMainTab] = React.useState("plan");
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 16,
+      background: C.bg,
+      borderRadius: 10,
+      padding: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setMainTab("plan"),
+    style: {
+      flex: 1,
+      border: "none",
+      borderRadius: 8,
+      padding: "8px 0",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer",
+      background: mainTab === "plan" ? C.surface : "transparent",
+      color: mainTab === "plan" ? C.accent : C.muted,
+      boxShadow: mainTab === "plan" ? C.shadow : "none"
+    }
+  }, "\uD83D\uDCC5 Plan"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setMainTab("log"),
+    style: {
+      flex: 1,
+      border: "none",
+      borderRadius: 8,
+      padding: "8px 0",
+      fontSize: 13,
+      fontWeight: 700,
+      cursor: "pointer",
+      background: mainTab === "log" ? C.surface : "transparent",
+      color: mainTab === "log" ? C.accent : C.muted,
+      boxShadow: mainTab === "log" ? C.shadow : "none"
+    }
+  }, "\u270D\uFE0F Logg")), mainTab === "plan" ? /*#__PURE__*/React.createElement(PlanCalendarView, {
+    plannedSessions: props.plannedSessions,
+    setPlannedSessions: props.setPlannedSessions,
+    sessions: props.sessions,
+    setSessions: props.setSessions,
+    goals: props.goals,
+    profile: props.profile,
+    prefs: props.prefs,
+    userId: props.userId
+  }) : /*#__PURE__*/React.createElement(LogView, {
+    sessions: props.sessions,
+    setSessions: props.setSessions,
+    goals: props.goals,
+    profile: props.profile,
+    userId: props.userId
+  }));
+}
 const DEFAULT_EXERCISES = [{
   id: "pullups",
   name: "Chins / Pull-ups",
@@ -5109,10 +5166,6 @@ function App() {
     icon: "📅",
     label: "Kalender"
   }, {
-    id: "log",
-    icon: "✍️",
-    label: "Logg"
-  }, {
     id: "strength",
     icon: "💪",
     label: "Styrke"
@@ -5145,17 +5198,10 @@ function App() {
             plannedSessions: plannedSessions,
             setPlannedSessions: setPlannedSessions,
             sessions: sessions,
-            goals: goals,
-            profile: profile,
-            prefs: prefs,
-            userId: userId
-          });
-        case "log":
-          return /*#__PURE__*/React.createElement(LogTab, {
-            sessions: sessions,
             setSessions: setSessions,
             goals: goals,
             profile: profile,
+            prefs: prefs,
             userId: userId
           });
         case "strength":
