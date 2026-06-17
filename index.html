@@ -172,11 +172,90 @@ function calcHAP(pace, tempC) {
   const adj = parsePace(pace) - excess * 0.083;
   return adj > 0 ? fmtPace(adj) : null;
 }
+// Grade percent from elevation gain and distance
+function calcGradePercent(elevM, distKm) {
+  if (!elevM || !distKm || parseFloat(distKm) === 0) return null;
+  return (parseFloat(elevM) / (parseFloat(distKm) * 1000) * 100).toFixed(1);
+}
+// Bike: km/h from km and minutes
+function calcKmh(km, min) {
+  if (!km || !min || parseFloat(min) === 0) return "";
+  return (parseFloat(km) / (parseFloat(min) / 60)).toFixed(1);
+}
+// Bike: rough power estimate (watts) from speed, elevation gain, distance, rider+bike weight
+// Simplified physics model: P = (Froll + Fgrav + Faero) * v
+function calcBikeWatts(km, min, elevM, weightKg) {
+  if (!km || !min || parseFloat(km) === 0 || parseFloat(min) === 0) return null;
+  const distM = parseFloat(km) * 1000,
+    timeS = parseFloat(min) * 60;
+  const v = distM / timeS; // m/s
+  const mass = (parseFloat(weightKg) || 75) + 9; // rider + bike estimate
+  const grade = elevM ? parseFloat(elevM) / distM : 0;
+  const g = 9.81,
+    Crr = 0.005,
+    CdA = 0.32,
+    rho = 1.225;
+  const Froll = Crr * mass * g;
+  const Fgrav = mass * g * grade;
+  const Faero = 0.5 * rho * CdA * v * v;
+  const watts = (Froll + Fgrav + Faero) * v;
+  return watts > 0 ? Math.round(watts) : null;
+}
+// Swim: pace in min/100m from km (or m) and minutes
+function calcSwimPace(distM, min) {
+  if (!distM || !min || parseFloat(distM) === 0) return "";
+  const pace100 = parseFloat(min) / (parseFloat(distM) / 100);
+  return fmtPace(pace100) || "";
+}
 function intensityColor(i) {
   return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
 }
 function typeLabel(t) {
   return t === "intervals" ? "🏃 Intervaller" : t === "easy" ? "🌿 Rolig jogging" : t === "long" ? "🏔️ Langtur" : t === "race" ? "🏆 Løp/Konkurranse" : t === "bike" ? "🚴 Sykkel" : t === "strength" ? "💪 Styrke" : t === "alt" ? "🏊 Alternativt" : t === "rest" ? "😴 Hvile" : t || "";
+}
+
+// ─── ICS CALENDAR EXPORT ────────────────────────────────────────────────────
+function icsEscape(s) {
+  return String(s || "").replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
+}
+function icsDate(dateStr) {
+  return dateStr.replace(/-/g, "");
+}
+function generateICS(prefs, goals, profile, plannedSessions, daysAhead) {
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Treningsdagbok//NO", "CALSCALE:GREGORIAN"];
+  const start = todayStr();
+  for (let i = 0; i < daysAhead; i++) {
+    const date = addDays(start, i);
+    const plans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, date);
+    plans.forEach((p, idx) => {
+      if (!p.type || p.type === "rest") return;
+      const dateNoD = icsDate(date);
+      const uid = `${dateNoD}-${idx}-${p.type}@treningsdagbok`;
+      lines.push("BEGIN:VEVENT");
+      lines.push(`UID:${uid}`);
+      lines.push(`DTSTAMP:${dateNoD}T000000Z`);
+      lines.push(`DTSTART;VALUE=DATE:${dateNoD}`);
+      lines.push(`SUMMARY:${icsEscape(p.label.replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF]/gu, "").trim())}`);
+      lines.push(`DESCRIPTION:${icsEscape(p.desc)}`);
+      lines.push("END:VEVENT");
+    });
+  }
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+function downloadICS(prefs, goals, profile, plannedSessions, daysAhead = 90) {
+  const ics = generateICS(prefs, goals, profile, plannedSessions, daysAhead);
+  const blob = new Blob([ics], {
+    type: "text/calendar;charset=utf-8"
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "treningsplan.ics";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 const SESSION_OPTS = [{
   value: "intervals",
@@ -2122,7 +2201,13 @@ function DashboardTab({
     todayType,
     profile
   });
-  const recentKm = sessions.filter(s => (new Date() - new Date(s.date + "T00:00:00")) / 86400000 <= 7).reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const last7Sessions = sessions.filter(s => (new Date() - new Date(s.date + "T00:00:00")) / 86400000 <= 7);
+  const recentKm = last7Sessions.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const runKm = last7Sessions.filter(s => ["easy", "intervals", "long", "race"].includes(s.type)).reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const bikeKm = last7Sessions.filter(s => s.type === "bike").reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const swimKm = last7Sessions.filter(s => s.type === "alt" && s.sport === "swim").reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const totalMin = last7Sessions.reduce((a, s) => a + (parseFloat(s.totalTime) || 0), 0);
+  const totalHours = totalMin / 60;
   const normHr = parseFloat(profile?.normHr) || 50;
   const hrDiff = hr ? parseFloat(hr) - normHr : null;
   const hrColor = hrDiff === null ? C.muted : hrDiff > 7 ? C.red : hrDiff > 3 ? C.yellow : C.green;
@@ -2372,19 +2457,11 @@ function DashboardTab({
   }, saving ? "Lagret ✓" : "Lagre morgendata")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
-      gridTemplateColumns: "repeat(3,1fr)",
+      gridTemplateColumns: "repeat(2,1fr)",
       gap: 10,
-      marginBottom: 12
+      marginBottom: 10
     }
   }, /*#__PURE__*/React.createElement(Card, {
-    style: {
-      padding: 12
-    }
-  }, /*#__PURE__*/React.createElement(Stat, {
-    label: "Km/uke",
-    value: recentKm.toFixed(0),
-    unit: "km"
-  })), /*#__PURE__*/React.createElement(Card, {
     style: {
       padding: 12
     }
@@ -2402,6 +2479,43 @@ function DashboardTab({
     value: hrv || "–",
     unit: "ms",
     color: C.green
+  }))), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12,
+      padding: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 700,
+      marginBottom: 10
+    }
+  }, "VOLUM SISTE 7 DAGER"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "repeat(4,1fr)",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Stat, {
+    label: "\uD83C\uDFC3 L\xF8p",
+    value: runKm.toFixed(0),
+    unit: "km"
+  }), /*#__PURE__*/React.createElement(Stat, {
+    label: "\uD83D\uDEB4 Sykkel",
+    value: bikeKm.toFixed(0),
+    unit: "km",
+    color: C.orange
+  }), /*#__PURE__*/React.createElement(Stat, {
+    label: "\uD83C\uDFCA Sv\xF8m",
+    value: swimKm > 0 ? swimKm.toFixed(1) : "0",
+    unit: "km",
+    color: "#0891b2"
+  }), /*#__PURE__*/React.createElement(Stat, {
+    label: "\u23F1 Totalt",
+    value: totalHours.toFixed(1),
+    unit: "t",
+    color: C.muted
   }))), /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 12,
@@ -3407,6 +3521,7 @@ function LogTab({
   const emptyForm = {
     date: today,
     type: "easy",
+    title: "",
     km: "",
     totalTime: "",
     avgPace: "",
@@ -3417,6 +3532,9 @@ function LogTab({
     temp: "",
     humidity: "",
     elevGain: "",
+    bikeKmh: "",
+    bikeWatts: "",
+    swimPace: "",
     notes: "",
     rpe: "5",
     intervals: []
@@ -3425,18 +3543,23 @@ function LogTab({
   const [saved, setSaved] = React.useState(false);
   const [editId, setEditId] = React.useState(null);
   const [expandedId, setExpandedId] = React.useState(null);
+  const [search, setSearch] = React.useState("");
+  const isBike = form.type === "bike";
+  const isSwim = form.type === "alt" && form.sport === "swim";
 
-  // Auto-calc pace from km+time
+  // Auto-calc pace from km+time (running)
   React.useEffect(() => {
+    if (isBike || isSwim) return;
     const p = calcPace(form.km, form.totalTime);
     if (p) setForm(f => ({
       ...f,
       avgPace: p
     }));
-  }, [form.km, form.totalTime]);
+  }, [form.km, form.totalTime, form.type]);
 
-  // Auto-calc GAP and HAP when pace/elev/temp change
+  // Auto-calc GAP, HAP, grade% for running
   React.useEffect(() => {
+    if (isBike || isSwim) return;
     if (form.avgPace && form.elevGain && form.km) {
       const g = calcGAP(form.avgPace, form.elevGain, form.km);
       setForm(f => ({
@@ -3451,7 +3574,29 @@ function LogTab({
         hap: h || ""
       }));
     }
-  }, [form.avgPace, form.elevGain, form.km, form.temp]);
+  }, [form.avgPace, form.elevGain, form.km, form.temp, form.type]);
+
+  // Auto-calc bike km/h and watts
+  React.useEffect(() => {
+    if (!isBike) return;
+    const kmh = calcKmh(form.km, form.totalTime);
+    const watts = calcBikeWatts(form.km, form.totalTime, form.elevGain, profile?.weightKg);
+    setForm(f => ({
+      ...f,
+      bikeKmh: kmh,
+      bikeWatts: watts || ""
+    }));
+  }, [form.km, form.totalTime, form.elevGain, form.type]);
+
+  // Auto-calc swim pace (treat km field as meters when swimming)
+  React.useEffect(() => {
+    if (!isSwim) return;
+    const sp = calcSwimPace(form.km, form.totalTime);
+    setForm(f => ({
+      ...f,
+      swimPace: sp
+    }));
+  }, [form.km, form.totalTime, form.type, form.sport]);
   function save() {
     if (!form.date || !form.type) return;
     setSessions(p => [...p.filter(s => s.id !== form.id), {
@@ -3480,6 +3625,7 @@ function LogTab({
     if (window.confirm("Slette denne økten?")) setSessions(p => p.filter(s => s.id !== id), userId);
   }
   const primaryGoal = goals.find(g => daysUntil(g.date) > -7);
+  const filteredSessions = search.trim() ? sessions.filter(s => (s.title || "").toLowerCase().includes(search.toLowerCase()) || (s.notes || "").toLowerCase().includes(search.toLowerCase())) : sessions;
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     style: {
       color: C.text,
@@ -3490,7 +3636,15 @@ function LogTab({
     style: {
       marginBottom: 16
     }
-  }, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Tittel (valgfritt, gj\xF8r det enkelt \xE5 s\xF8ke senere)",
+    value: form.title,
+    onChange: v => setForm(p => ({
+      ...p,
+      title: v
+    })),
+    placeholder: "f.eks. 6x1km terskel"
+  }), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr",
@@ -3509,10 +3663,154 @@ function LogTab({
     value: form.type,
     onChange: v => setForm(p => ({
       ...p,
-      type: v
+      type: v,
+      sport: v === "alt" ? p.sport : undefined
     })),
     options: SESSION_OPTS
+  })), form.type === "alt" && /*#__PURE__*/React.createElement(Sel, {
+    label: "Aktivitet",
+    value: form.sport || "other",
+    onChange: v => setForm(p => ({
+      ...p,
+      sport: v
+    })),
+    options: [{
+      value: "swim",
+      label: "🏊 Svømming"
+    }, {
+      value: "other",
+      label: "Annet"
+    }]
+  }), isSwim ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Distanse (m)",
+    type: "number",
+    value: form.km,
+    onChange: v => setForm(p => ({
+      ...p,
+      km: v
+    })),
+    placeholder: "1500"
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Tid (min)",
+    type: "number",
+    value: form.totalTime,
+    onChange: v => setForm(p => ({
+      ...p,
+      totalTime: v
+    }))
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "Tempo (auto)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: form.swimPace ? "#0891b2" : C.muted,
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, form.swimPace ? form.swimPace + "/100m" : "–")))) : isBike ? /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement(Inp, {
+    label: "Km",
+    type: "number",
+    step: "0.1",
+    value: form.km,
+    onChange: v => setForm(p => ({
+      ...p,
+      km: v
+    }))
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Tid (min)",
+    type: "number",
+    value: form.totalTime,
+    onChange: v => setForm(p => ({
+      ...p,
+      totalTime: v
+    }))
   })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "Snittfart (auto)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: form.bikeKmh ? C.orange : C.muted,
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, form.bikeKmh ? form.bikeKmh + " km/t" : "–")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      fontWeight: 600,
+      marginBottom: 4
+    }
+  }, "Est. watt (auto)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: C.bg,
+      border: `1.5px solid ${C.border}`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      color: form.bikeWatts ? C.orange : C.muted,
+      fontSize: 14,
+      fontWeight: 700
+    }
+  }, form.bikeWatts ? "~" + form.bikeWatts + " W" : "–"))), /*#__PURE__*/React.createElement(Inp, {
+    label: "H\xF8ydemeter (m)",
+    type: "number",
+    value: form.elevGain,
+    onChange: v => setForm(p => ({
+      ...p,
+      elevGain: v
+    }))
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginBottom: 12
+    }
+  }, "\uD83D\uDCA1 Watt er et grovt fysikkbasert anslag (ikke ekte wattm\xE5ler-data), basert p\xE5 fart, h\xF8ydemeter og din vekt fra profilen.")) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "1fr 1fr 1fr",
@@ -3594,7 +3892,17 @@ function LogTab({
       ...p,
       elevGain: v
     }))
-  })), (form.gap || form.hap) && /*#__PURE__*/React.createElement("div", {
+  })), form.elevGain && form.km && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      marginBottom: 8
+    }
+  }, "\uD83D\uDCD0 Stigning: ", /*#__PURE__*/React.createElement("b", {
+    style: {
+      color: C.text
+    }
+  }, calcGradePercent(form.elevGain, form.km), "%")), (form.gap || form.hap) && /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
       borderRadius: 8,
@@ -3612,7 +3920,7 @@ function LogTab({
       color: C.orange,
       fontWeight: 700
     }
-  }, form.hap, "/km"))), /*#__PURE__*/React.createElement("div", {
+  }, form.hap, "/km")))), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 12
     }
@@ -3680,12 +3988,32 @@ function LogTab({
     color: C.muted
   }, "Avbryt"))), sessions.length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 12,
-      color: C.muted,
-      fontWeight: 700,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
       marginBottom: 10
     }
-  }, "HISTORIKK"), sessions.map(s => {
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      fontWeight: 700
+    }
+  }, "HISTORIKK")), /*#__PURE__*/React.createElement(Inp, {
+    value: search,
+    onChange: setSearch,
+    placeholder: "\uD83D\uDD0D S\xF8k i tittel eller notater...",
+    style: {
+      marginBottom: 12
+    }
+  }), filteredSessions.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: C.muted,
+      textAlign: "center",
+      padding: 20,
+      fontSize: 13
+    }
+  }, "Ingen treff p\xE5 \"", search, "\""), filteredSessions.map(s => {
     const isExpanded = expandedId === s.id;
     const feedback = goals.length ? analyzeSession(s, goals, profile) : [];
     return /*#__PURE__*/React.createElement(Card, {
@@ -3710,12 +4038,29 @@ function LogTab({
         fontWeight: 700,
         fontSize: 13
       }
+    }, s.title ? s.title : typeLabel(s.type)), s.title && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: C.muted
+      }
     }, typeLabel(s.type)), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.muted
       }
-    }, formatDate(s.date), s.stravaId ? " · 📡" : ""), s.km && /*#__PURE__*/React.createElement("div", {
+    }, formatDate(s.date), s.stravaId ? " · 📡" : ""), s.type === "bike" && s.km && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: C.orange,
+        marginTop: 2
+      }
+    }, s.km, "km", s.bikeKmh ? " · " + s.bikeKmh + " km/t" : "", s.bikeWatts ? " · ~" + s.bikeWatts + "W" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : ""), s.sport === "swim" && s.km && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#0891b2",
+        marginTop: 2
+      }
+    }, s.km, "m", s.swimPace ? " · " + s.swimPace + "/100m" : ""), s.type !== "bike" && !(s.sport === "swim") && s.km && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.accent,
@@ -3729,7 +4074,7 @@ function LogTab({
       style: {
         color: C.orange
       }
-    }, " \xB7 HAP ", s.hap) : "", s.avgHr ? " · " + s.avgHr + "bpm" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : ""), feedback.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, " \xB7 HAP ", s.hap) : "", s.avgHr ? " · " + s.avgHr + "bpm" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : "", s.elevGain && s.km ? " (" + calcGradePercent(s.elevGain, s.km) + "%)" : ""), feedback.length > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: feedback[0].startsWith("⚠️") || feedback[0].startsWith("🔴") ? C.red : feedback[0].startsWith("✅") || feedback[0].startsWith("🏆") ? C.green : C.muted,
@@ -4426,6 +4771,8 @@ function ProfileTab({
   setSessions,
   prefs,
   setPrefs,
+  goals,
+  plannedSessions,
   userId
 }) {
   const [form, setForm] = React.useState(profile || {
@@ -4888,6 +5235,35 @@ function ProfileTab({
       fontWeight: 700,
       marginBottom: 8
     }
+  }, "\uD83D\uDCF2 EKSPORTER TIL KALENDER (iCloud / Google)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: C.muted,
+      marginBottom: 10
+    }
+  }, "Last ned dine planlagte trenings\xF8kter (90 dager) som en .ics-fil. Importer den i Apple Kalender, Google Kalender eller Outlook for \xE5 se treningsplanen i din vanlige kalender."), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => downloadICS(prefs, goals || [], form, plannedSessions || {}, 90),
+    color: C.accent,
+    style: {
+      width: "100%"
+    }
+  }, "\u2B07\uFE0F Last ned treningsplan.ics"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.muted,
+      marginTop: 8
+    }
+  }, /*#__PURE__*/React.createElement("b", null, "Slik importerer du p\xE5 iPhone:"), " \xC5pne filen \u2192 \xABLegg til alle\xBB i Kalender-appen. Du kan velge en egen kalender (f.eks. \xABTrening\xBB) slik at det ikke blandes med andre avtaler.")), /*#__PURE__*/React.createElement(Card, {
+    style: {
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: C.accent,
+      fontWeight: 700,
+      marginBottom: 8
+    }
   }, "\u2601\uFE0F SKYSYNKRONISERING"), /*#__PURE__*/React.createElement(Inp, {
     label: "Supabase URL",
     value: supabaseUrl,
@@ -5183,6 +5559,8 @@ function App() {
             setSessions: setSessions,
             prefs: prefs,
             setPrefs: setPrefs,
+            goals: goals,
+            plannedSessions: plannedSessions,
             userId: userId
           });
         default:
