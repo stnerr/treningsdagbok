@@ -2173,7 +2173,12 @@ const PROGRAMS = {
 function getProgramSession(progKey, startDate, dateStr) {
   const prog = PROGRAMS[progKey];
   if (!prog || prog.isAuto || !startDate || !dateStr) return null;
-  const daysDiff = Math.round((new Date(dateStr + "T00:00:00") - new Date(startDate + "T00:00:00")) / 86400000);
+  // Snap startDate to the Monday of its week, so the program's week 1 always begins on a Monday
+  // regardless of which weekday the user picked in the date field.
+  const startD = dow(startDate);
+  const mondayOffset = startD === 0 ? -6 : 1 - startD; // days to subtract/add to reach Monday
+  const startMonday = addDays(startDate, mondayOffset);
+  const daysDiff = Math.round((new Date(dateStr + "T00:00:00") - new Date(startMonday + "T00:00:00")) / 86400000);
   if (daysDiff < 0) return null;
   const weekIdx = Math.floor(daysDiff / 7);
   if (weekIdx >= prog.weeks.length) return null;
@@ -3780,13 +3785,13 @@ function CalendarTab({
       display: "grid",
       gridTemplateColumns: "repeat(7,1fr)",
       gap: 2,
-      marginBottom: 4
+      marginBottom: 6
     }
   }, CAL_DAYS.map(d => /*#__PURE__*/React.createElement("div", {
     key: d,
     style: {
       textAlign: "center",
-      fontSize: 10,
+      fontSize: 11,
       color: C.muted,
       fontWeight: 700,
       padding: "3px 0"
@@ -3811,53 +3816,63 @@ function CalendarTab({
       isToday = date === today,
       isPast = date < today,
       isGoal = goalDates.has(date);
+    const dotColor = isGoal ? C.red : plans[0] ? intensityColor(plans[0].intensity) : null;
     return /*#__PURE__*/React.createElement("div", {
       key: day,
       onClick: () => openDate(date),
       style: {
-        minHeight: 52,
-        borderRadius: 10,
-        padding: "3px 4px",
+        aspectRatio: "1",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
         cursor: "pointer",
-        background: isGoal ? "#fef2f2" : isToday ? C.accent + "18" : C.surface,
-        border: `1.5px solid ${isGoal ? C.red : isToday ? C.accent : C.border}`,
-        transition: "all .1s"
-      },
-      onMouseEnter: e => e.currentTarget.style.background = isGoal ? "#fee2e2" : isToday ? C.accent + "28" : "#f8fafc",
-      onMouseLeave: e => e.currentTarget.style.background = isGoal ? "#fef2f2" : isToday ? C.accent + "18" : C.surface
+        position: "relative"
+      }
     }, /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 11,
-        fontWeight: isToday ? 800 : 500,
-        color: isGoal ? C.red : isToday ? C.accent : isPast ? C.muted : C.text,
-        marginBottom: 1
+        width: 34,
+        height: 34,
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        background: isToday ? C.accent : "transparent",
+        transition: "background .1s"
       }
-    }, day, isGoal ? "🏆" : ""), plans.slice(0, 2).map((p, i) => /*#__PURE__*/React.createElement("div", {
-      key: i,
+    }, /*#__PURE__*/React.createElement("span", {
       style: {
-        fontSize: 8,
-        borderRadius: 3,
-        padding: "1px 2px",
-        marginBottom: 1,
-        background: intensityColor(p.intensity) + "22",
-        color: intensityColor(p.intensity),
-        fontWeight: 700,
-        overflow: "hidden",
-        whiteSpace: "nowrap",
-        textOverflow: "ellipsis"
+        fontSize: 15,
+        fontWeight: isToday ? 800 : isGoal ? 800 : 500,
+        color: isToday ? "#fff" : isGoal ? C.red : isPast ? C.muted : C.text
       }
-    }, p.label.replace(/[\u{1F000}-\u{1FFFF}]/gu, "").trim() || p.type)), done.length > 0 && /*#__PURE__*/React.createElement("div", {
+    }, day)), /*#__PURE__*/React.createElement("div", {
       style: {
-        fontSize: 8,
-        color: C.green,
-        fontWeight: 700
+        display: "flex",
+        gap: 2,
+        height: 5,
+        marginTop: 2
       }
-    }, "\u2713", done.length));
+    }, dotColor && /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 5,
+        height: 5,
+        borderRadius: "50%",
+        background: dotColor
+      }
+    }), done.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 5,
+        height: 5,
+        borderRadius: "50%",
+        background: C.green
+      }
+    })));
   })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 10,
-      marginTop: 10,
+      marginTop: 14,
       flexWrap: "wrap"
     }
   }, [{
@@ -3883,11 +3898,10 @@ function CalendarTab({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      width: 10,
-      height: 10,
-      borderRadius: 2,
-      background: color + "44",
-      border: `1px solid ${color}`
+      width: 8,
+      height: 8,
+      borderRadius: "50%",
+      background: color
     }
   }), label))), selDate && /*#__PURE__*/React.createElement(EditModal, null));
 }
@@ -5734,7 +5748,7 @@ function ProfileTab({
       }
     }, "Effort-soner (% av makspuls ", max, "):"), /*#__PURE__*/React.createElement("br", null), "Effort 1: ", Math.round(max * .60), "\u2013", Math.round(max * .72), " bpm (veldig lett) \xB7 Effort 2: ", Math.round(max * .72), "\u2013", Math.round(max * .80), " bpm (lett)", /*#__PURE__*/React.createElement("br", null), "Effort 3: ", Math.round(max * .80), "\u2013", Math.round(max * .87), " bpm (moderat) \xB7 Effort 4: ", Math.round(max * .87), "\u2013", Math.round(max * .92), " bpm (hardt)", /*#__PURE__*/React.createElement("br", null), "Effort 5: ", Math.round(max * .92), "\u2013", Math.round(max * .97), " bpm (veldig hardt)");
   })(), /*#__PURE__*/React.createElement(Inp, {
-    label: "Startdato for uke 1 (mandag)",
+    label: "Startdato (programmet starter automatisk p\xE5 mandag i denne uken)",
     type: "date",
     value: prefs?.programStartDate || "",
     onChange: v => setPrefs(p => ({
@@ -5750,20 +5764,28 @@ function ProfileTab({
       borderRadius: 8,
       padding: 10
     }
-  }, "Sett startdato til ", /*#__PURE__*/React.createElement("b", null, "mandagen i uke 1"), ". Riktig \xF8kt vises automatisk for hver dag.", prefs?.programStartDate && (() => {
-    const wk = Math.floor((new Date() - new Date(prefs.programStartDate + "T00:00:00")) / (7 * 86400000)) + 1;
+  }, "Velg en hvilken som helst dato i uke 1 \u2013 appen starter automatisk programmet p\xE5 ", /*#__PURE__*/React.createElement("b", null, "mandagen i den uken"), ". Merk: mange programmer har mandag som fast hviledag, s\xE5 f\xF8rste \xF8kt vises gjerne tirsdag.", prefs?.programStartDate && (() => {
+    const d0 = dow(prefs.programStartDate);
+    const mondayOffset = d0 === 0 ? -6 : 1 - d0;
+    const startMonday = addDays(prefs.programStartDate, mondayOffset);
+    const wk = Math.floor((new Date() - new Date(startMonday + "T00:00:00")) / (7 * 86400000)) + 1;
     const prog = PROGRAMS[prefs.program];
     if (wk >= 1 && prog && wk <= prog.weeks?.length) return /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.green,
         fontWeight: 700
       }
-    }, " N\xE5: uke ", wk, " av ", prog.weeks.length, ".");
+    }, " N\xE5: uke ", wk, " av ", prog.weeks.length, " (uke 1 starter ", formatDateShort(startMonday), ").");
     if (wk > prog?.weeks?.length) return /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.muted
       }
     }, " Programmet er fullf\xF8rt!");
+    if (wk < 1) return /*#__PURE__*/React.createElement("span", {
+      style: {
+        color: C.accent
+      }
+    }, " Uke 1 starter ", formatDateShort(startMonday), ".");
     return null;
   })())) : /*#__PURE__*/React.createElement("div", {
     style: {
