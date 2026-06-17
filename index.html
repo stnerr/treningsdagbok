@@ -16,8 +16,8 @@
 </head>
 <body>
   <div id="root"></div>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script>
 window.SUPABASE_URL = localStorage.getItem("nm_supabase_url") ? JSON.parse(localStorage.getItem("nm_supabase_url")) : "";
 window.SUPABASE_ANON_KEY = localStorage.getItem("nm_supabase_key") ? JSON.parse(localStorage.getItem("nm_supabase_key")) : "";
@@ -5125,56 +5125,75 @@ function App() {
     icon: "👤",
     label: "Profil"
   }];
-  const tc = {
-    dashboard: /*#__PURE__*/React.createElement(DashboardTab, {
-      sessions: sessions,
-      setSessions: setSessions,
-      morningData: morningData,
-      setMorningData: setMorningData,
-      goals: goals,
-      plannedSessions: plannedSessions,
-      profile: profile,
-      prefs: prefs,
-      userId: userId
-    }),
-    calendar: /*#__PURE__*/React.createElement(CalendarTab, {
-      plannedSessions: plannedSessions,
-      setPlannedSessions: setPlannedSessions,
-      sessions: sessions,
-      goals: goals,
-      profile: profile,
-      prefs: prefs,
-      userId: userId
-    }),
-    log: /*#__PURE__*/React.createElement(LogTab, {
-      sessions: sessions,
-      setSessions: setSessions,
-      goals: goals,
-      profile: profile,
-      userId: userId
-    }),
-    strength: /*#__PURE__*/React.createElement(StrengthTab, {
-      strengthLog: strengthLog,
-      setStrengthLog: setStrengthLog,
-      userId: userId
-    }),
-    goals: /*#__PURE__*/React.createElement(GoalsTab, {
-      goals: goals,
-      setGoals: setGoals,
-      sessions: sessions,
-      profile: profile,
-      userId: userId
-    }),
-    profile: /*#__PURE__*/React.createElement(ProfileTab, {
-      profile: profile,
-      setProfile: setProfile,
-      sessions: sessions,
-      setSessions: setSessions,
-      prefs: prefs,
-      setPrefs: setPrefs,
-      userId: userId
-    })
-  };
+  function renderTab() {
+    try {
+      switch (tab) {
+        case "dashboard":
+          return /*#__PURE__*/React.createElement(DashboardTab, {
+            sessions: sessions,
+            setSessions: setSessions,
+            morningData: morningData,
+            setMorningData: setMorningData,
+            goals: goals,
+            plannedSessions: plannedSessions,
+            profile: profile,
+            prefs: prefs,
+            userId: userId
+          });
+        case "calendar":
+          return /*#__PURE__*/React.createElement(CalendarTab, {
+            plannedSessions: plannedSessions,
+            setPlannedSessions: setPlannedSessions,
+            sessions: sessions,
+            goals: goals,
+            profile: profile,
+            prefs: prefs,
+            userId: userId
+          });
+        case "log":
+          return /*#__PURE__*/React.createElement(LogTab, {
+            sessions: sessions,
+            setSessions: setSessions,
+            goals: goals,
+            profile: profile,
+            userId: userId
+          });
+        case "strength":
+          return /*#__PURE__*/React.createElement(StrengthTab, {
+            strengthLog: strengthLog,
+            setStrengthLog: setStrengthLog,
+            userId: userId
+          });
+        case "goals":
+          return /*#__PURE__*/React.createElement(GoalsTab, {
+            goals: goals,
+            setGoals: setGoals,
+            sessions: sessions,
+            profile: profile,
+            userId: userId
+          });
+        case "profile":
+          return /*#__PURE__*/React.createElement(ProfileTab, {
+            profile: profile,
+            setProfile: setProfile,
+            sessions: sessions,
+            setSessions: setSessions,
+            prefs: prefs,
+            setPrefs: setPrefs,
+            userId: userId
+          });
+        default:
+          return null;
+      }
+    } catch (e) {
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: 20,
+          color: C.red
+        }
+      }, /*#__PURE__*/React.createElement("b", null, "Feil i visning:"), /*#__PURE__*/React.createElement("br", null), String(e.message));
+    }
+  }
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
@@ -5250,7 +5269,7 @@ function App() {
       maxWidth: 520,
       margin: "0 auto"
     }
-  }, tc[tab]), /*#__PURE__*/React.createElement("div", {
+  }, renderTab()), /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       bottom: 0,
