@@ -5606,7 +5606,14 @@ function ProfileTab({
       const data = await res.json();
       if (data.tokens) setStravaTokens(data.tokens);
       const ids = new Set(data.sessions.map(s => s.stravaId));
-      setSessions(p => [...p.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...data.sessions].sort((a, b) => b.date.localeCompare(a.date)), userId);
+      setSessions(p => {
+        const merged = [...p.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...data.sessions].sort((a, b) => b.date.localeCompare(a.date));
+        // Immediately save to Supabase without debounce so page reloads don't lose data
+        if (userId && sbUrl() && sbKey()) {
+          saveToSupabase(userId, "nm_sessions", merged);
+        }
+        return merged;
+      }, userId);
       const runs = data.sessions.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
       const bikes = data.sessions.filter(s => s.type === "bike").length;
       const other = data.sessions.length - runs - bikes;
@@ -6133,9 +6140,17 @@ function App() {
     let ok = false;
     if (data.nm_sessions?.length) {
       setSessions(prev => {
-        const stravaOnly = prev.filter(s => s.stravaId);
+        // Merge strategy: keep all local Strava sessions (stravaId) +
+        // keep local-only sessions (no stravaId, not in cloud) +
+        // add cloud sessions that don't exist locally
+        const localIds = new Set(prev.map(s => s.id));
         const cloudIds = new Set(data.nm_sessions.map(s => s.id));
-        const merged = [...data.nm_sessions, ...stravaOnly.filter(s => !cloudIds.has(s.id))];
+        // Cloud sessions not yet local
+        const newFromCloud = data.nm_sessions.filter(s => !localIds.has(s.id));
+        // Local sessions not in cloud (manual entries + Strava)
+        const localOnly = prev.filter(s => !cloudIds.has(s.id));
+        // For sessions in both: prefer local version (more recent edit)
+        const merged = [...prev, ...newFromCloud];
         return merged.sort((a, b) => b.date.localeCompare(a.date));
       });
       ok = true;
