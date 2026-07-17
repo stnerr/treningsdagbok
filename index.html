@@ -5607,9 +5607,12 @@ function ProfileTab({
       if (data.tokens) setStravaTokens(data.tokens);
       const ids = new Set(data.sessions.map(s => s.stravaId));
       setSessions(p => [...p.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...data.sessions].sort((a, b) => b.date.localeCompare(a.date)), userId);
+      const runs = data.sessions.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
+      const bikes = data.sessions.filter(s => s.type === "bike").length;
+      const other = data.sessions.length - runs - bikes;
       setSyncResult({
         type: "success",
-        msg: `✅ Hentet ${data.sessions.length} aktiviteter.`
+        msg: `✅ Hentet ${data.sessions.length} aktiviteter: ${runs} løp, ${bikes} sykkel${other > 0 ? ", " + other + " andre" : ""}. Gå til Logg-fanen for å se dem.`
       });
     } catch (err) {
       setSyncResult({
@@ -6129,7 +6132,12 @@ function App() {
     if (!data) return false;
     let ok = false;
     if (data.nm_sessions?.length) {
-      setSessions(data.nm_sessions);
+      setSessions(prev => {
+        const stravaOnly = prev.filter(s => s.stravaId);
+        const cloudIds = new Set(data.nm_sessions.map(s => s.id));
+        const merged = [...data.nm_sessions, ...stravaOnly.filter(s => !cloudIds.has(s.id))];
+        return merged.sort((a, b) => b.date.localeCompare(a.date));
+      });
       ok = true;
     }
     if (data.nm_morning && Object.keys(data.nm_morning).length) {
