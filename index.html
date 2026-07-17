@@ -3478,7 +3478,7 @@ function CalendarTab({
         color: C.green,
         fontWeight: 600
       }
-    }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : ""))), /*#__PURE__*/React.createElement("div", {
+    }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null))), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.muted,
@@ -4733,7 +4733,19 @@ function LogTab({
         fontSize: 12,
         color: C.muted
       }
-    }, formatDate(s.date), s.stravaId ? " · 📡" : ""), s.type === "bike" && s.km && /*#__PURE__*/React.createElement("div", {
+    }, formatDate(s.date)), s.stravaId ? /*#__PURE__*/React.createElement("span", {
+      style: {
+        display: "inline-block",
+        background: "#FC4C02",
+        color: "#fff",
+        fontSize: 9,
+        fontWeight: 700,
+        padding: "1px 6px",
+        borderRadius: 4,
+        marginTop: 3,
+        letterSpacing: 0.5
+      }
+    }, "STRAVA") : null, s.type === "bike" && s.km && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.orange,
