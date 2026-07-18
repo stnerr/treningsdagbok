@@ -5574,6 +5574,8 @@ function ProfileTab({
   setProfile: _setProfile,
   sessions,
   setSessions,
+  wellness,
+  setWellness,
   prefs,
   setPrefs: _setPrefs,
   goals,
@@ -5599,6 +5601,13 @@ function ProfileTab({
   const [saved, setSaved] = React.useState(false);
   const [stravaTokens, setStravaTokens] = useStore("nm_strava_tokens", null);
   const [backendUrl, setBackendUrl] = useStore("nm_strava_backend", "");
+  const [stravaEnabled, setStravaEnabled] = useStore("nm_strava_enabled", true);
+  // intervals.icu
+  const [icuApiKey, setIcuApiKey] = useStore("nm_icu_apikey", "");
+  const [icuBackend, setIcuBackend] = useStore("nm_icu_backend", "");
+  const [icuAthleteId, setIcuAthleteId] = useStore("nm_icu_athlete", "0");
+  const [icuSyncing, setIcuSyncing] = React.useState(false);
+  const [icuResult, setIcuResult] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
   const [syncResult, setSyncResult] = React.useState(null);
   const [showManual, setShowManual] = React.useState(false);
@@ -5706,6 +5715,63 @@ function ProfileTab({
       });
     }
   }
+  async function syncIntervals() {
+    if (!icuApiKey) { setIcuResult({ type: "error", msg: "Lim inn API-nøkkel først." }); return; }
+    if (!icuBackend) { setIcuResult({ type: "error", msg: "Lim inn backend-URL først." }); return; }
+    const base = icuBackend.replace(/\/$/, "");
+    setIcuSyncing(true);
+    setIcuResult(null);
+    try {
+      // Date window: last 180 days
+      const d = new Date(); const newest = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const o = new Date(); o.setDate(o.getDate() - 180);
+      const oldest = `${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,"0")}-${String(o.getDate()).padStart(2,"0")}`;
+      const headers = { "X-Api-Key": icuApiKey, "X-Athlete-Id": icuAthleteId || "0" };
+
+      // Activities
+      const actRes = await fetch(`${base}/api/activities?oldest=${oldest}&newest=${newest}`, { headers });
+      if (!actRes.ok) { const e = await actRes.json().catch(()=>({})); throw new Error(e.error || `HTTP ${actRes.status}`); }
+      const actData = await actRes.json();
+
+      // Wellness (for form curve)
+      let wellnessCount = 0;
+      try {
+        const wRes = await fetch(`${base}/api/wellness?oldest=${oldest}&newest=${newest}`, { headers });
+        if (wRes.ok) {
+          const wData = await wRes.json();
+          if (wData.wellness?.length) {
+            setWellness(wData.wellness, userId);
+            wellnessCount = wData.wellness.length;
+          }
+        }
+      } catch (e) { /* wellness optional */ }
+
+      // Merge activities (dedupe by icuId; newest edit wins)
+      const icuIds = new Set(actData.sessions.map(s => s.icuId));
+      setSessions(p => {
+        const localByIcu = {};
+        p.forEach(s => { if (s.icuId) localByIcu[s.icuId] = s; });
+        const mergedIcu = actData.sessions.map(fresh => {
+          const local = localByIcu[fresh.icuId];
+          if (local && (local.updatedAt || 0) > (fresh.updatedAt || 0)) return local;
+          return fresh;
+        });
+        const merged = [...p.filter(s => !s.icuId || !icuIds.has(s.icuId)), ...mergedIcu].sort((a, b) => b.date.localeCompare(a.date));
+        if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_sessions", merged);
+        return merged;
+      }, userId);
+
+      const runs = actData.sessions.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
+      const bikes = actData.sessions.filter(s => s.type === "bike").length;
+      const other = actData.sessions.length - runs - bikes;
+      setIcuResult({ type: "success", msg: `✅ Hentet ${actData.sessions.length} økter (${runs} løp, ${bikes} sykkel${other>0?", "+other+" andre":""})${wellnessCount?` + ${wellnessCount} dager formdata`:""}.` });
+    } catch (err) {
+      setIcuResult({ type: "error", msg: "Feil: " + err.message });
+    } finally {
+      setIcuSyncing(false);
+    }
+  }
+
   async function syncStrava() {
     if (!stravaTokens?.access_token) {
       setSyncResult({
@@ -6165,18 +6231,27 @@ function ProfileTab({
       color: C.green,
       marginTop: 4
     }
-  }, "\u2713 Synkronisering aktiv som: ", /*#__PURE__*/React.createElement("b", null, syncUserId))), /*#__PURE__*/React.createElement(Card, {
-    style: {
-      marginBottom: 12
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#FC4C02",
-      fontWeight: 700,
-      marginBottom: 8
-    }
-  }, "\uD83D\uDFE0 STRAVA"), /*#__PURE__*/React.createElement(Inp, {
+  }, "\u2713 Synkronisering aktiv som: ", /*#__PURE__*/React.createElement("b", null, syncUserId))),
+  /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#3b82f6", fontWeight: 700, marginBottom: 8 } }, "\uD83D\uDCC8 INTERVALS.ICU"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Henter data fra Garmin via intervals.icu, inkludert ferdig utregnet form (CTL/ATL/TSB) og helsedata."),
+    /*#__PURE__*/React.createElement(Inp, { label: "Backend-URL (Vercel)", value: icuBackend, onChange: setIcuBackend, placeholder: "https://ditt-intervals-sync.vercel.app" }),
+    /*#__PURE__*/React.createElement(Inp, { label: "API-nøkkel (fra intervals.icu \u2192 Settings \u2192 Developer)", value: icuApiKey, onChange: setIcuApiKey, placeholder: "Lim inn API-nøkkel", type: "password" }),
+    /*#__PURE__*/React.createElement(Inp, { label: "Athlete-ID (la stå 0 for din egen konto)", value: icuAthleteId, onChange: setIcuAthleteId, placeholder: "0" }),
+    /*#__PURE__*/React.createElement(Btn, { onClick: syncIntervals, color: icuApiKey && icuBackend ? "#3b82f6" : C.muted, style: { width: "100%", color: "#fff", marginTop: 4 } }, icuSyncing ? "\u23F3 Synkroniserer..." : "\uD83D\uDD04 Synkroniser fra intervals.icu"),
+    icuResult && /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: icuResult.type === "error" ? C.red : C.green, marginTop: 8 } }, icuResult.msg)
+  ),
+  /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#FC4C02", fontWeight: 700 } }, "\uD83D\uDFE0 STRAVA"),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => setStravaEnabled(!stravaEnabled),
+        style: { border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", background: stravaEnabled ? "#FC4C02" : C.border, color: stravaEnabled ? "#fff" : C.muted }
+      }, stravaEnabled ? "PÅ" : "AV")
+    ),
+    !stravaEnabled && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 8 } }, "Strava er satt på pause. Innstillingene beholdes \u2013 trykk PÅ for å bruke den igjen."),
+    stravaEnabled && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8 } },
+    /*#__PURE__*/React.createElement(Inp, {
     label: "Vercel backend URL",
     value: backendUrl,
     onChange: setBackendUrl,
@@ -6230,12 +6305,125 @@ function ProfileTab({
       color: syncResult.type === "error" ? C.red : C.green,
       marginTop: 8
     }
-  }, syncResult.msg)));
+  }, syncResult.msg))));
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 
 // ─── STATS TAB ────────────────────────────────────────────────────────────────
+// ─── FORM TAB (PMC: CTL/ATL/TSB) ──────────────────────────────────────────────
+function FormTab({ wellness, sessions, goals }) {
+  // wellness rows: {date, ctl, atl, tsb, restingHr, hrv, ...}
+  const hasData = wellness && wellness.length > 0;
+  const [range, setRange] = React.useState(90);
+
+  if (!hasData) {
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83C\uDFA2 Form"),
+      /*#__PURE__*/React.createElement(Card, null,
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "center", padding: "24px 12px" } },
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 40, marginBottom: 12 } }, "\uD83C\uDFA2"),
+          /*#__PURE__*/React.createElement("div", { style: { fontWeight: 700, marginBottom: 8 } }, "Ingen formdata ennå"),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: C.muted, lineHeight: 1.5 } },
+            "Formkurven viser fitness (CTL), tretthet (ATL) og dagsform (TSB) over tid. Koble til intervals.icu under Profil og synkroniser \u2013 så henter appen de ferdig utregnede formtallene fra Garmin-dataene dine."))
+      )
+    );
+  }
+
+  // Sort by date ascending, take last N days
+  const sorted = [...wellness].filter(w => w.ctl != null || w.atl != null).sort((a, b) => a.date.localeCompare(b.date));
+  const data = sorted.slice(-range);
+
+  if (data.length === 0) {
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83C\uDFA2 Form"),
+      /*#__PURE__*/React.createElement(Card, null,
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: C.muted, padding: 12 } },
+          "Formdata er hentet, men mangler CTL/ATL-verdier. Sjekk at intervals.icu har beregnet form for perioden."))
+    );
+  }
+
+  const latest = data[data.length - 1];
+  const ctlVals = data.map(d => d.ctl || 0);
+  const atlVals = data.map(d => d.atl || 0);
+  const tsbVals = data.map(d => d.tsb != null ? d.tsb : (d.ctl || 0) - (d.atl || 0));
+  const maxLoad = Math.max(...ctlVals, ...atlVals, 1);
+  const minTsb = Math.min(...tsbVals, 0);
+  const maxTsb = Math.max(...tsbVals, 0);
+
+  // Chart geometry
+  const W = 320, H = 160, padL = 8, padR = 8, padT = 8, padB = 8;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
+  const x = i => padL + (data.length <= 1 ? 0 : (i / (data.length - 1)) * plotW);
+  const yLoad = v => padT + plotH - (v / maxLoad) * plotH;
+
+  function linePath(vals, yFn) {
+    return vals.map((v, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)},${yFn(v).toFixed(1)}`).join(" ");
+  }
+
+  // TSB interpretation
+  const tsb = latest.tsb != null ? latest.tsb : (latest.ctl || 0) - (latest.atl || 0);
+  let tsbLabel, tsbColor;
+  if (tsb > 5) { tsbLabel = "Uthvilt / form-topp"; tsbColor = C.green; }
+  else if (tsb > -10) { tsbLabel = "Balansert"; tsbColor = C.accent; }
+  else if (tsb > -30) { tsbLabel = "Produktiv belastning"; tsbColor = C.yellow; }
+  else { tsbLabel = "Høy tretthet – pass på"; tsbColor = C.red; }
+
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83C\uDFA2 Form"),
+
+    // Current status cards
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 12 } },
+        /*#__PURE__*/React.createElement(Stat, { label: "Fitness (CTL)", value: Math.round(latest.ctl || 0), color: C.accent }),
+        /*#__PURE__*/React.createElement(Stat, { label: "Tretthet (ATL)", value: Math.round(latest.atl || 0), color: C.orange }),
+        /*#__PURE__*/React.createElement(Stat, { label: "Form (TSB)", value: (tsb > 0 ? "+" : "") + Math.round(tsb), color: tsbColor })
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: tsbColor, textAlign: "center", padding: "6px 0", background: tsbColor + "12", borderRadius: 8 } }, tsbLabel)
+    ),
+
+    // Range toggle
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 12 } },
+      [30, 90, 180].map(r => /*#__PURE__*/React.createElement("div", {
+        key: r, onClick: () => setRange(r),
+        style: { flex: 1, textAlign: "center", padding: "6px 0", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: range === r ? 700 : 400, background: range === r ? C.accent + "18" : C.surface, border: "1.5px solid " + (range === r ? C.accent : C.border), color: range === r ? C.accent : C.muted }
+      }, r + " dager"))
+    ),
+
+    // PMC Chart
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 12 } }, "FORMKURVE (PMC)"),
+      /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block" } },
+        // baseline
+        /*#__PURE__*/React.createElement("line", { x1: padL, y1: padT + plotH, x2: W - padR, y2: padT + plotH, stroke: C.border, strokeWidth: 1 }),
+        // CTL area-ish line (fitness)
+        /*#__PURE__*/React.createElement("path", { d: linePath(ctlVals, yLoad), fill: "none", stroke: C.accent, strokeWidth: 2 }),
+        // ATL line (fatigue)
+        /*#__PURE__*/React.createElement("path", { d: linePath(atlVals, yLoad), fill: "none", stroke: C.orange, strokeWidth: 1.5, strokeDasharray: "4 3" })
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" } },
+        [{ c: C.accent, l: "Fitness (CTL)" }, { c: C.orange, l: "Tretthet (ATL)" }].map(x => /*#__PURE__*/React.createElement("div", {
+          key: x.l, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.muted }
+        }, /*#__PURE__*/React.createElement("div", { style: { width: 12, height: 3, background: x.c } }), x.l))
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 6 } },
+        /*#__PURE__*/React.createElement("span", null, data[0].date.slice(5)),
+        /*#__PURE__*/React.createElement("span", null, data[data.length - 1].date.slice(5)))
+    ),
+
+    // Wellness snapshot
+    (latest.restingHr || latest.hrv) && /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE HELSEDATA"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 } },
+        latest.restingHr && /*#__PURE__*/React.createElement(Stat, { label: "Hvilepuls", value: Math.round(latest.restingHr), unit: "bpm", color: C.text }),
+        latest.hrv && /*#__PURE__*/React.createElement(Stat, { label: "HRV", value: Math.round(latest.hrv), unit: "ms", color: C.text }),
+        latest.sleepHours && /*#__PURE__*/React.createElement(Stat, { label: "Søvn", value: latest.sleepHours, unit: "t", color: C.text }),
+        latest.vo2max && /*#__PURE__*/React.createElement(Stat, { label: "VO2max", value: Math.round(latest.vo2max), color: C.text })
+      )
+    )
+  );
+}
+
 function StatsTab({ sessions }) {
   const [metric, setMetric] = React.useState("km"); // "km" or "time"
   const [weeksBack, setWeeksBack] = React.useState(12);
@@ -6420,6 +6608,7 @@ function App() {
   }
   const isAdmin = authRole === "admin";
   const [sessions, setSessions] = useStore("nm_sessions", []);
+  const [wellness, setWellness] = useStore("nm_wellness", []);
   const [morningData, setMorningData] = useStore("nm_morning", {});
   const [goals, setGoals] = useStore("nm_goals", []);
   const [plannedSessions, setPlannedSessions] = useStore("nm_plan", {});
@@ -6502,6 +6691,10 @@ function App() {
       setPlannedSessions(data.nm_plan);
       ok = true;
     }
+    if (data.nm_wellness?.length) {
+      setWellness(data.nm_wellness);
+      ok = true;
+    }
     if (data.nm_strength && Object.keys(data.nm_strength).length) {
       setStrengthLog(data.nm_strength);
       ok = true;
@@ -6563,6 +6756,10 @@ function App() {
     icon: "📈",
     label: "Statistikk"
   }, {
+    id: "form",
+    icon: "🎢",
+    label: "Form"
+  }, {
     id: "strength",
     icon: "💪",
     label: "Styrke"
@@ -6616,6 +6813,12 @@ function App() {
           return /*#__PURE__*/React.createElement(StatsTab, {
             sessions: sessions
           });
+        case "form":
+          return /*#__PURE__*/React.createElement(FormTab, {
+            wellness: wellness,
+            sessions: sessions,
+            goals: goals
+          });
         case "strength":
           return /*#__PURE__*/React.createElement(StrengthTab, {
             strengthLog: strengthLog,
@@ -6638,6 +6841,8 @@ function App() {
             setProfile: setProfile,
             sessions: sessions,
             setSessions: setSessions,
+            wellness: wellness,
+            setWellness: setWellness,
             prefs: prefs,
             setPrefs: setPrefs,
             goals: goals,
