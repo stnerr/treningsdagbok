@@ -2609,7 +2609,8 @@ function QuickLogModal({
       humidity: "",
       date: todayStr(),
       intervals: isInterval ? intervals : [],
-      id: Date.now()
+      id: Date.now(),
+      updatedAt: Date.now()
     });
     onClose();
   }
@@ -4370,7 +4371,8 @@ function LogTab({
     if (!form.date || !form.type) return;
     setSessions(p => [...p.filter(s => s.id !== form.id), {
       ...form,
-      id: form.id || Date.now()
+      id: form.id || Date.now(),
+      updatedAt: Date.now()
     }].sort((a, b) => b.date.localeCompare(a.date)), userId);
     setSaved(true);
     setEditId(null);
@@ -5729,7 +5731,18 @@ function ProfileTab({
       if (data.tokens) setStravaTokens(data.tokens);
       const ids = new Set(data.sessions.map(s => s.stravaId));
       setSessions(p => {
-        const merged = [...p.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...data.sessions].sort((a, b) => b.date.localeCompare(a.date));
+        // Stamp incoming Strava sessions with a base timestamp
+        const incoming = data.sessions.map(s => ({ ...s, updatedAt: s.updatedAt || 0 }));
+        // Keep local edits: if a local Strava session was edited (has updatedAt)
+        // more recently than the re-fetched one, keep the local version.
+        const localByStravaId = {};
+        p.forEach(s => { if (s.stravaId) localByStravaId[s.stravaId] = s; });
+        const mergedStrava = incoming.map(fresh => {
+          const local = localByStravaId[fresh.stravaId];
+          if (local && (local.updatedAt || 0) > (fresh.updatedAt || 0)) return local;
+          return fresh;
+        });
+        const merged = [...p.filter(s => !s.stravaId || !ids.has(s.stravaId)), ...mergedStrava].sort((a, b) => b.date.localeCompare(a.date));
         // Immediately save to Supabase without debounce so page reloads don't lose data
         if (userId && sbUrl() && sbKey()) {
           saveToSupabase(userId, "nm_sessions", merged);
@@ -6227,23 +6240,27 @@ function StatsTab({ sessions }) {
   const [metric, setMetric] = React.useState("km"); // "km" or "time"
   const [weeksBack, setWeeksBack] = React.useState(12);
 
-  // Build week buckets (Monday-based ISO weeks)
+  // Build week buckets (Monday-based). Use LOCAL date parts (not toISOString,
+  // which shifts the date in non-UTC timezones and breaks bucket matching).
+  function fmtLocal(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
   function mondayOf(dateStr) {
     const d = new Date(dateStr + "T00:00:00");
     const day = d.getDay();
     const offset = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + offset);
-    return d.toISOString().slice(0, 10);
+    return fmtLocal(d);
   }
   function isRun(t) { return ["easy", "intervals", "long", "race"].includes(t); }
 
   const now = new Date();
-  const thisMonday = mondayOf(now.toISOString().slice(0, 10));
+  const thisMonday = mondayOf(fmtLocal(now));
   const weeks = [];
   for (let i = weeksBack - 1; i >= 0; i--) {
     const m = new Date(thisMonday + "T00:00:00");
     m.setDate(m.getDate() - i * 7);
-    weeks.push(m.toISOString().slice(0, 10));
+    weeks.push(fmtLocal(m));
   }
   const weekData = weeks.map(wk => {
     const wkSessions = sessions.filter(s => mondayOf(s.date) === wk);
@@ -6453,18 +6470,23 @@ function App() {
     let ok = false;
     if (data.nm_sessions?.length) {
       setSessions(prev => {
-        // Merge strategy: keep all local Strava sessions (stravaId) +
-        // keep local-only sessions (no stravaId, not in cloud) +
-        // add cloud sessions that don't exist locally
-        const localIds = new Set(prev.map(s => s.id));
-        const cloudIds = new Set(data.nm_sessions.map(s => s.id));
-        // Cloud sessions not yet local
-        const newFromCloud = data.nm_sessions.filter(s => !localIds.has(s.id));
-        // Local sessions not in cloud (manual entries + Strava)
-        const localOnly = prev.filter(s => !cloudIds.has(s.id));
-        // For sessions in both: prefer local version (more recent edit)
-        const merged = [...prev, ...newFromCloud];
-        return merged.sort((a, b) => b.date.localeCompare(a.date));
+        // Merge by id: newest version wins (by updatedAt timestamp).
+        // This lets edits made on one device propagate to others,
+        // while still preserving local-only sessions not yet in the cloud.
+        const byId = {};
+        prev.forEach(s => { byId[s.id] = s; });
+        data.nm_sessions.forEach(cloud => {
+          const local = byId[cloud.id];
+          if (!local) {
+            byId[cloud.id] = cloud; // new from cloud
+          } else {
+            const localT = local.updatedAt || 0;
+            const cloudT = cloud.updatedAt || 0;
+            // Cloud wins if it's newer or equal (equal means same or cloud is source of truth)
+            byId[cloud.id] = cloudT >= localT ? cloud : local;
+          }
+        });
+        return Object.values(byId).sort((a, b) => b.date.localeCompare(a.date));
       });
       ok = true;
     }
