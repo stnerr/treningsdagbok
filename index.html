@@ -5582,7 +5582,13 @@ function ProfileTab({
   plannedSessions,
   userId,
   isAdmin,
-  doLogout
+  doLogout,
+  icuApiKey, setIcuApiKey,
+  icuBackend, setIcuBackend,
+  icuAthleteId, setIcuAthleteId,
+  stravaBackendUrl: backendUrl, setStravaBackendUrl: setBackendUrl,
+  stravaEnabled, setStravaEnabled,
+  stravaTokens, setStravaTokens
 }) {
   const setProfile = isAdmin ? _setProfile : () => alert("Kun admin kan endre profilen. Du er innlogget som besøkende.");
   const setPrefs = isAdmin ? _setPrefs : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
@@ -5599,13 +5605,6 @@ function ProfileTab({
     weightKg: ""
   });
   const [saved, setSaved] = React.useState(false);
-  const [stravaTokens, setStravaTokens] = useStore("nm_strava_tokens", null);
-  const [backendUrl, setBackendUrl] = useStore("nm_strava_backend", "");
-  const [stravaEnabled, setStravaEnabled] = useStore("nm_strava_enabled", true);
-  // intervals.icu
-  const [icuApiKey, setIcuApiKey] = useStore("nm_icu_apikey", "");
-  const [icuBackend, setIcuBackend] = useStore("nm_icu_backend", "");
-  const [icuAthleteId, setIcuAthleteId] = useStore("nm_icu_athlete", "0");
   const [icuSyncing, setIcuSyncing] = React.useState(false);
   const [icuResult, setIcuResult] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
@@ -6235,9 +6234,9 @@ function ProfileTab({
   /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#3b82f6", fontWeight: 700, marginBottom: 8 } }, "\uD83D\uDCC8 INTERVALS.ICU"),
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Henter data fra Garmin via intervals.icu, inkludert ferdig utregnet form (CTL/ATL/TSB) og helsedata."),
-    /*#__PURE__*/React.createElement(Inp, { label: "Backend-URL (Vercel)", value: icuBackend, onChange: setIcuBackend, placeholder: "https://ditt-intervals-sync.vercel.app" }),
-    /*#__PURE__*/React.createElement(Inp, { label: "API-nøkkel (fra intervals.icu \u2192 Settings \u2192 Developer)", value: icuApiKey, onChange: setIcuApiKey, placeholder: "Lim inn API-nøkkel", type: "password" }),
-    /*#__PURE__*/React.createElement(Inp, { label: "Athlete-ID (la stå 0 for din egen konto)", value: icuAthleteId, onChange: setIcuAthleteId, placeholder: "0" }),
+    /*#__PURE__*/React.createElement(Inp, { label: "Backend-URL (Vercel)", value: icuBackend, onChange: v => setIcuBackend(v, userId), placeholder: "https://ditt-intervals-sync.vercel.app" }),
+    /*#__PURE__*/React.createElement(Inp, { label: "API-nøkkel (fra intervals.icu \u2192 Settings \u2192 Developer)", value: icuApiKey, onChange: v => setIcuApiKey(v, userId), placeholder: "Lim inn API-nøkkel", type: "password" }),
+    /*#__PURE__*/React.createElement(Inp, { label: "Athlete-ID (la stå 0 for din egen konto)", value: icuAthleteId, onChange: v => setIcuAthleteId(v, userId), placeholder: "0" }),
     /*#__PURE__*/React.createElement(Btn, { onClick: syncIntervals, color: icuApiKey && icuBackend ? "#3b82f6" : C.muted, style: { width: "100%", color: "#fff", marginTop: 4 } }, icuSyncing ? "\u23F3 Synkroniserer..." : "\uD83D\uDD04 Synkroniser fra intervals.icu"),
     icuResult && /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: icuResult.type === "error" ? C.red : C.green, marginTop: 8 } }, icuResult.msg)
   ),
@@ -6245,7 +6244,7 @@ function ProfileTab({
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#FC4C02", fontWeight: 700 } }, "\uD83D\uDFE0 STRAVA"),
       /*#__PURE__*/React.createElement("button", {
-        onClick: () => setStravaEnabled(!stravaEnabled),
+        onClick: () => setStravaEnabled(!stravaEnabled, userId),
         style: { border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", background: stravaEnabled ? "#FC4C02" : C.border, color: stravaEnabled ? "#fff" : C.muted }
       }, stravaEnabled ? "PÅ" : "AV")
     ),
@@ -6254,7 +6253,7 @@ function ProfileTab({
     /*#__PURE__*/React.createElement(Inp, {
     label: "Vercel backend URL",
     value: backendUrl,
-    onChange: setBackendUrl,
+    onChange: v => setBackendUrl(v, userId),
     placeholder: "https://nm-strava-sync.vercel.app"
   }), stravaTokens?.access_token ? /*#__PURE__*/React.createElement("div", {
     style: {
@@ -6609,6 +6608,12 @@ function App() {
   const isAdmin = authRole === "admin";
   const [sessions, setSessions] = useStore("nm_sessions", []);
   const [wellness, setWellness] = useStore("nm_wellness", []);
+  const [icuApiKey, setIcuApiKey] = useStore("nm_icu_apikey", "");
+  const [icuBackend, setIcuBackend] = useStore("nm_icu_backend", "");
+  const [icuAthleteId, setIcuAthleteId] = useStore("nm_icu_athlete", "0");
+  const [stravaBackendUrl, setStravaBackendUrl] = useStore("nm_strava_backend", "");
+  const [stravaEnabled, setStravaEnabled] = useStore("nm_strava_enabled", true);
+  const [stravaTokens, setStravaTokens] = useStore("nm_strava_tokens", null);
   const [morningData, setMorningData] = useStore("nm_morning", {});
   const [goals, setGoals] = useStore("nm_goals", []);
   const [plannedSessions, setPlannedSessions] = useStore("nm_plan", {});
@@ -6707,6 +6712,13 @@ function App() {
       setPrefs(data.nm_prefs);
       ok = true;
     }
+    // Settings that should follow the admin across devices
+    if (data.nm_icu_apikey) { setIcuApiKey(data.nm_icu_apikey); ok = true; }
+    if (data.nm_icu_backend) { setIcuBackend(data.nm_icu_backend); ok = true; }
+    if (data.nm_icu_athlete) { setIcuAthleteId(data.nm_icu_athlete); ok = true; }
+    if (data.nm_strava_backend) { setStravaBackendUrl(data.nm_strava_backend); ok = true; }
+    if (data.nm_strava_enabled != null) { setStravaEnabled(data.nm_strava_enabled); ok = true; }
+    if (data.nm_strava_tokens) { setStravaTokens(data.nm_strava_tokens); ok = true; }
     return ok;
   }
   React.useEffect(() => {
@@ -6849,7 +6861,13 @@ function App() {
             plannedSessions: plannedSessions,
             userId: userId,
             isAdmin: isAdmin,
-            doLogout: doLogout
+            doLogout: doLogout,
+            icuApiKey: icuApiKey, setIcuApiKey: setIcuApiKey,
+            icuBackend: icuBackend, setIcuBackend: setIcuBackend,
+            icuAthleteId: icuAthleteId, setIcuAthleteId: setIcuAthleteId,
+            stravaBackendUrl: stravaBackendUrl, setStravaBackendUrl: setStravaBackendUrl,
+            stravaEnabled: stravaEnabled, setStravaEnabled: setStravaEnabled,
+            stravaTokens: stravaTokens, setStravaTokens: setStravaTokens
           });
         default:
           return null;
