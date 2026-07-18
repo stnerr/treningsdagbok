@@ -34,6 +34,7 @@ const C = {
   yellow: "#d97706",
   red: "#dc2626",
   orange: "#ea580c",
+  lightblue: "#0ea5e9",
   text: "#1e293b",
   muted: "#64748b",
   shadow: "0 1px 3px rgba(0,0,0,0.08)"
@@ -208,7 +209,7 @@ function calcSwimPace(distM, min) {
   return fmtPace(pace100) || "";
 }
 function intensityColor(i) {
-  return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.green : C.muted;
+  return i === "hard" ? C.red : i === "medium" ? C.yellow : i === "easy" ? C.lightblue : C.muted;
 }
 function typeLabel(t) {
   return t === "intervals" ? "🏃 Intervaller" : t === "easy" ? "🌿 Rolig jogging" : t === "long" ? "🏔️ Langtur" : t === "race" ? "🏆 Løp/Konkurranse" : t === "bike" ? "🚴 Sykkel" : t === "strength" ? "💪 Styrke" : t === "alt" ? "🏊 Alternativt" : t === "rest" ? "😴 Hvile" : t || "";
@@ -2183,7 +2184,14 @@ function getProgramSession(progKey, startDate, dateStr) {
   const weekIdx = Math.floor(daysDiff / 7);
   if (weekIdx >= prog.weeks.length) return null;
   const weekPlan = prog.weeks[weekIdx];
-  return weekPlan[dow(dateStr)] || [];
+  let lookupDow = dow(dateStr);
+  // Bakken 100-days: shift all sessions one day earlier (intervals start Monday,
+  // long runs land Saturday). So the session shown on a given day is the one that
+  // was originally keyed to the NEXT day.
+  if (progKey === "bakken_100days") {
+    lookupDow = (lookupDow + 1) % 7; // Mon(1)->Tue(2), ... Sat(6)->Sun(0), Sun(0)->Mon(1)
+  }
+  return weekPlan[lookupDow] || [];
 }
 function getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, dateStr) {
   if (plannedSessions[dateStr] !== undefined) return plannedSessions[dateStr];
@@ -3323,14 +3331,16 @@ function DashboardTab({
 // ─── CALENDAR TAB ─────────────────────────────────────────────────────────────
 function CalendarTab({
   plannedSessions,
-  setPlannedSessions,
+  setPlannedSessions: _setPlannedSessions,
   sessions,
   setSessions,
   goals,
   profile,
   prefs,
-  userId
+  userId,
+  isAdmin
 }) {
+  const setPlannedSessions = isAdmin ? _setPlannedSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const [viewMode, setViewMode] = React.useState("calendar");
   const [curMonth, setCurMonth] = React.useState(() => {
     const d = new Date();
@@ -3340,6 +3350,7 @@ function CalendarTab({
     };
   });
   const [selDate, setSelDate] = React.useState(null);
+  const [infoDate, setInfoDate] = React.useState(todayStr());
   const [editSessions, setEditSessions] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
   const [newSess, setNewSess] = React.useState({
@@ -3817,9 +3828,10 @@ function CalendarTab({
       isPast = date < today,
       isGoal = goalDates.has(date);
     const dotColor = isGoal ? C.red : plans[0] ? intensityColor(plans[0].intensity) : null;
+    const isInfo = date === infoDate;
     return /*#__PURE__*/React.createElement("div", {
       key: day,
-      onClick: () => openDate(date),
+      onClick: () => setInfoDate(date),
       style: {
         aspectRatio: "1",
         display: "flex",
@@ -3837,7 +3849,9 @@ function CalendarTab({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: isToday ? C.accent : "transparent",
+        background: isToday ? C.accent : isInfo ? C.accent + "22" : "transparent",
+        border: isInfo && !isToday ? `2px solid ${C.accent}` : "2px solid transparent",
+        boxSizing: "border-box",
         transition: "background .1s"
       }
     }, /*#__PURE__*/React.createElement("span", {
@@ -3877,13 +3891,16 @@ function CalendarTab({
     }
   }, [{
     color: C.red,
-    label: "Hard/Mål"
+    label: "Hard"
   }, {
     color: C.yellow,
     label: "Medium"
   }, {
+    color: C.lightblue,
+    label: "Lett"
+  }, {
     color: C.green,
-    label: "Lett/Gjennomf."
+    label: "Gjennomført"
   }].map(({
     color,
     label
@@ -3903,7 +3920,62 @@ function CalendarTab({
       borderRadius: "50%",
       background: color
     }
-  }), label))), selDate && /*#__PURE__*/React.createElement(EditModal, null));
+  }), label))), /*#__PURE__*/React.createElement(InfoPanel, null), selDate && /*#__PURE__*/React.createElement(EditModal, null));
+
+  function InfoPanel() {
+    const d = infoDate || today;
+    const plans = getPlans(d);
+    const done = getDone(d);
+    const goalOnDay = goals.find(g => g.date === d);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        marginTop: 16,
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 14,
+        padding: 16,
+        boxShadow: C.shadow
+      }
+    },
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontWeight: 800, fontSize: 15, color: d === today ? C.accent : C.text }
+      }, d === today ? "I dag" : DAYS[dow(d)], " ", formatDate(d)),
+      /*#__PURE__*/React.createElement(Btn, {
+        onClick: () => openDate(d), small: true, color: C.accent, outline: true
+      }, "✎ Rediger")
+    ),
+    goalOnDay && /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 13, color: C.red, fontWeight: 700, marginBottom: 8 }
+    }, "🏆 ", goalOnDay.name),
+    plans.length === 0 && done.length === 0 && /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 13, color: C.muted }
+    }, "Ingen økt planlagt denne dagen"),
+    plans.map((p, i) => /*#__PURE__*/React.createElement("div", {
+      key: "p" + i,
+      style: { padding: "6px 0", borderBottom: i < plans.length - 1 ? `1px solid ${C.border}` : "none" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontWeight: 700, color: intensityColor(p.intensity), fontSize: 14 }
+      }, p.label),
+      p.desc && /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 12, color: C.muted, marginTop: 2 }
+      }, p.desc)
+    )),
+    done.length > 0 && /*#__PURE__*/React.createElement("div", {
+      style: { marginTop: plans.length > 0 ? 10 : 0, paddingTop: plans.length > 0 ? 10 : 0, borderTop: plans.length > 0 ? `1px solid ${C.border}` : "none" }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 11, color: C.green, fontWeight: 700, marginBottom: 6 }
+      }, "✓ GJENNOMFØRT"),
+      done.map((s, i) => /*#__PURE__*/React.createElement("div", {
+        key: "d" + i,
+        style: { background: "#f0fdf4", borderRadius: 8, padding: "6px 10px", marginBottom: 4, fontSize: 13, color: C.green, fontWeight: 600 }
+      }, "✓ ", s.title ? s.title : typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null))
+    ));
+  }
 }
 
 // ─── INTERVAL BUILDER ────────────────────────────────────────────────────────
@@ -4158,6 +4230,15 @@ function analyzeSession(session, goals, profile) {
       const avgP = validDrags.reduce((a, iv) => a + parsePace(iv.pace), 0) / validDrags.length;
       const diff = avgP - racePace;
       if (diff < -0.1) msgs.push(`✅ Snitt drag-tempo ${fmtPace(avgP)}/km – ${Math.abs(diff * 60).toFixed(0)} sek/km raskere enn race-pace (${fmtPace(racePace)}/km)!`);else if (diff > 0.15) msgs.push(`⚠️ Snitt drag-tempo ${fmtPace(avgP)}/km – ${(diff * 60).toFixed(0)} sek/km saktere enn race-pace. Mål: ${fmtPace(racePace)}/km.`);else msgs.push(`✅ Drag-tempo (${fmtPace(avgP)}/km) er nær race-pace – god kontroll!`);
+      // Heat adjustment: if warm, note the heat-adjusted equivalent pace
+      if (session.temp && parseFloat(session.temp) > 20) {
+        const hapAvg = calcHAP(fmtPace(avgP), session.temp);
+        if (hapAvg) {
+          const hapDiff = parsePace(hapAvg) - racePace;
+          const hapNote = hapDiff <= 0.05 ? ` Det tilsvarer omtrent race-pace i normal temperatur – bra jobba i varmen!` : ` Det er nærmere målet enn tallene tilsier.`;
+          msgs.push(`🌡 Det var ${session.temp}°C. Varmejustert tilsvarer dette ca. ${hapAvg}/km.${hapNote}`);
+        }
+      }
       const paces = validDrags.map(iv => parsePace(iv.pace));
       const spread = Math.max(...paces) - Math.min(...paces);
       if (spread > 0.25) msgs.push(`⚡ Spredning mellom drag: ${(spread * 60).toFixed(0)} sek/km. Prøv jevnere uttak neste gang.`);else if (validDrags.length >= 3) msgs.push(`✅ Jevne drag – god intensitetsstyring.`);
@@ -4197,11 +4278,13 @@ function analyzeSession(session, goals, profile) {
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
 function LogTab({
   sessions,
-  setSessions,
+  setSessions: _setSessions,
   goals,
   profile,
-  userId
+  userId,
+  isAdmin
 }) {
+  const setSessions = isAdmin ? _setSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const today = todayStr();
   const emptyForm = {
     date: today,
@@ -4229,6 +4312,7 @@ function LogTab({
   const [editId, setEditId] = React.useState(null);
   const [expandedId, setExpandedId] = React.useState(null);
   const [search, setSearch] = React.useState("");
+  const [typeFilter, setTypeFilter] = React.useState("all");
   const isBike = form.type === "bike";
   const isSwim = form.type === "alt" && form.sport === "swim";
 
@@ -4310,7 +4394,13 @@ function LogTab({
     if (window.confirm("Slette denne økten?")) setSessions(p => p.filter(s => s.id !== id), userId);
   }
   const primaryGoal = goals.find(g => daysUntil(g.date) > -7);
-  const filteredSessions = search.trim() ? sessions.filter(s => (s.title || "").toLowerCase().includes(search.toLowerCase()) || (s.notes || "").toLowerCase().includes(search.toLowerCase())) : sessions;
+  const filteredSessions = sessions.filter(s => {
+    const matchSearch = !search.trim() || (s.title || "").toLowerCase().includes(search.toLowerCase()) || (s.notes || "").toLowerCase().includes(search.toLowerCase());
+    let matchType = typeFilter === "all";
+    if (typeFilter === "run") matchType = ["easy", "intervals", "long", "race"].includes(s.type);
+    else if (typeFilter !== "all") matchType = s.type === typeFilter;
+    return matchSearch && matchType;
+  });
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     style: {
       color: C.text,
@@ -4689,16 +4779,28 @@ function LogTab({
     onChange: setSearch,
     placeholder: "\uD83D\uDD0D S\xF8k i tittel eller notater...",
     style: {
-      marginBottom: 12
+      marginBottom: 10
     }
-  }), filteredSessions.length === 0 && /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8, marginBottom: 8 }
+  }, [{ v: "all", l: "Alle" }, { v: "run", l: "\uD83C\uDFC3 L\xF8p" }, { v: "intervals", l: "Intervaller" }, { v: "easy", l: "Rolig" }, { v: "long", l: "Langtur" }, { v: "race", l: "L\xF8p/konk" }, { v: "bike", l: "\uD83D\uDEB4 Sykkel" }, { v: "strength", l: "\uD83D\uDCAA Styrke" }, { v: "alt", l: "\uD83C\uDFCA Alt" }].map(o => /*#__PURE__*/React.createElement("div", {
+    key: o.v,
+    onClick: () => setTypeFilter(o.v),
+    style: {
+      flexShrink: 0, padding: "5px 12px", borderRadius: 20, cursor: "pointer", fontSize: 12,
+      fontWeight: typeFilter === o.v ? 700 : 400, whiteSpace: "nowrap",
+      background: typeFilter === o.v ? C.accent + "18" : C.surface,
+      border: "1.5px solid " + (typeFilter === o.v ? C.accent : C.border),
+      color: typeFilter === o.v ? C.accent : C.muted
+    }
+  }, o.l))), filteredSessions.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
       color: C.muted,
       textAlign: "center",
       padding: 20,
       fontSize: 13
     }
-  }, "Ingen treff p\xE5 \"", search, "\""), filteredSessions.map(s => {
+  }, "Ingen treff"), filteredSessions.map(s => {
     const isExpanded = expandedId === s.id;
     const feedback = goals.length ? analyzeSession(s, goals, profile) : [];
     return /*#__PURE__*/React.createElement(Card, {
@@ -4889,9 +4991,11 @@ const DEFAULT_EXERCISES = [{
 }];
 function StrengthTab({
   strengthLog,
-  setStrengthLog,
-  userId
+  setStrengthLog: _setStrengthLog,
+  userId,
+  isAdmin
 }) {
+  const setStrengthLog = isAdmin ? _setStrengthLog : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const [active, setActive] = React.useState("pullups");
   const [view, setView] = React.useState("log");
   const [form, setForm] = React.useState({
@@ -5282,11 +5386,13 @@ function StrengthTab({
 // ─── GOALS TAB ────────────────────────────────────────────────────────────────
 function GoalsTab({
   goals,
-  setGoals,
+  setGoals: _setGoals,
   sessions,
   profile,
-  userId
+  userId,
+  isAdmin
 }) {
+  const setGoals = isAdmin ? _setGoals : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const [form, setForm] = React.useState({
     name: "",
     date: "",
@@ -5463,15 +5569,19 @@ function GoalsTab({
 // ─── PROFILE TAB ─────────────────────────────────────────────────────────────
 function ProfileTab({
   profile,
-  setProfile,
+  setProfile: _setProfile,
   sessions,
   setSessions,
   prefs,
-  setPrefs,
+  setPrefs: _setPrefs,
   goals,
   plannedSessions,
-  userId
+  userId,
+  isAdmin,
+  doLogout
 }) {
+  const setProfile = isAdmin ? _setProfile : () => alert("Kun admin kan endre profilen. Du er innlogget som besøkende.");
+  const setPrefs = isAdmin ? _setPrefs : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const [form, setForm] = React.useState(profile || {
     name: "",
     normHr: "50",
@@ -5669,7 +5779,19 @@ function ProfileTab({
       fontWeight: 800,
       marginBottom: 16
     }
-  }, "\uD83D\uDC64 Profil"), /*#__PURE__*/React.createElement(Card, {
+  }, "\uD83D\uDC64 Profil"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex", justifyContent: "space-between", alignItems: "center",
+      background: isAdmin ? C.accent + "12" : "#fef3c7", border: `1px solid ${isAdmin ? C.accent : C.yellow}33`,
+      borderRadius: 10, padding: "10px 14px", marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: isAdmin ? C.accent : C.yellow } },
+    isAdmin ? "🔓 Innlogget som admin" : "👁 Innlogget som besøkende (kun lesing)"),
+    /*#__PURE__*/React.createElement("button", {
+      onClick: doLogout,
+      style: { border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: C.muted }
+    }, "Logg ut")
+  ), /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 12
     }
@@ -6099,8 +6221,187 @@ function ProfileTab({
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
+
+// ─── STATS TAB ────────────────────────────────────────────────────────────────
+function StatsTab({ sessions }) {
+  const [metric, setMetric] = React.useState("km"); // "km" or "time"
+  const [weeksBack, setWeeksBack] = React.useState(12);
+
+  // Build week buckets (Monday-based ISO weeks)
+  function mondayOf(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    const day = d.getDay();
+    const offset = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10);
+  }
+  function isRun(t) { return ["easy", "intervals", "long", "race"].includes(t); }
+
+  const now = new Date();
+  const thisMonday = mondayOf(now.toISOString().slice(0, 10));
+  const weeks = [];
+  for (let i = weeksBack - 1; i >= 0; i--) {
+    const m = new Date(thisMonday + "T00:00:00");
+    m.setDate(m.getDate() - i * 7);
+    weeks.push(m.toISOString().slice(0, 10));
+  }
+  const weekData = weeks.map(wk => {
+    const wkSessions = sessions.filter(s => mondayOf(s.date) === wk);
+    const sum = (filterFn) => wkSessions.filter(filterFn).reduce((acc, s) => {
+      const val = metric === "km" ? (parseFloat(s.km) || 0) : (parseFloat(s.totalTime) || 0) / 60;
+      return acc + val;
+    }, 0);
+    return {
+      week: wk,
+      run: sum(s => isRun(s.type)),
+      bike: sum(s => s.type === "bike"),
+      swim: sum(s => s.type === "alt"),
+      total: sum(() => true)
+    };
+  });
+
+  const maxVal = Math.max(...weekData.map(w => w.total), 1);
+  const unit = metric === "km" ? "km" : "t";
+
+  // Totals across the whole period
+  const totalRun = weekData.reduce((a, w) => a + w.run, 0);
+  const totalBike = weekData.reduce((a, w) => a + w.bike, 0);
+  const totalSwim = weekData.reduce((a, w) => a + w.swim, 0);
+  const totalAll = weekData.reduce((a, w) => a + w.total, 0);
+  const avgPerWeek = totalAll / weeksBack;
+
+  const SPORT_COLORS = { run: C.accent, bike: C.orange, swim: C.lightblue };
+
+  function fmtVal(v) { return metric === "km" ? v.toFixed(1) : v.toFixed(1); }
+
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "📈 Statistikk"),
+
+    // Metric toggle
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12, background: C.bg, borderRadius: 10, padding: 4 } },
+      ["km", "time"].map(m => /*#__PURE__*/React.createElement("button", {
+        key: m,
+        onClick: () => setMetric(m),
+        style: {
+          flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer",
+          background: metric === m ? C.surface : "transparent",
+          color: metric === m ? C.accent : C.muted,
+          boxShadow: metric === m ? C.shadow : "none"
+        }
+      }, m === "km" ? "📏 Kilometer" : "⏱ Timer"))
+    ),
+
+    // Period toggle
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 16 } },
+      [8, 12, 26, 52].map(w => /*#__PURE__*/React.createElement("div", {
+        key: w,
+        onClick: () => setWeeksBack(w),
+        style: {
+          flex: 1, textAlign: "center", padding: "6px 0", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: weeksBack === w ? 700 : 400,
+          background: weeksBack === w ? C.accent + "18" : C.surface,
+          border: "1.5px solid " + (weeksBack === w ? C.accent : C.border),
+          color: weeksBack === w ? C.accent : C.muted
+        }
+      }, w + " uker"))
+    ),
+
+    // Summary stats
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 } },
+        /*#__PURE__*/React.createElement(Stat, { label: "Totalt " + unit, value: fmtVal(totalAll), unit: unit, color: C.text }),
+        /*#__PURE__*/React.createElement(Stat, { label: "Snitt/uke", value: fmtVal(avgPerWeek), unit: unit, color: C.accent }),
+        /*#__PURE__*/React.createElement(Stat, { label: "🏃 Løp", value: fmtVal(totalRun), unit: unit, color: C.accent }),
+        /*#__PURE__*/React.createElement(Stat, { label: "🚴 Sykkel", value: fmtVal(totalBike), unit: unit, color: C.orange })
+      )
+    ),
+
+    // Stacked bar chart
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 12 } }, "PER UKE (" + unit + ")"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "flex-end", gap: 3, height: 160, marginBottom: 8 } },
+        weekData.map((w, i) => {
+          const totalH = (w.total / maxVal) * 100;
+          const runH = w.total > 0 ? (w.run / w.total) * totalH : 0;
+          const bikeH = w.total > 0 ? (w.bike / w.total) * totalH : 0;
+          const swimH = w.total > 0 ? (w.swim / w.total) * totalH : 0;
+          const label = w.week.slice(5); // MM-DD
+          return /*#__PURE__*/React.createElement("div", {
+            key: i,
+            title: label + ": " + fmtVal(w.total) + unit,
+            style: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", height: "100%", cursor: "default" }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { width: "100%", display: "flex", flexDirection: "column-reverse", height: totalH + "%", minHeight: w.total > 0 ? 2 : 0, borderRadius: "3px 3px 0 0", overflow: "hidden" } },
+              /*#__PURE__*/React.createElement("div", { style: { height: runH + "%", background: SPORT_COLORS.run } }),
+              /*#__PURE__*/React.createElement("div", { style: { height: bikeH + "%", background: SPORT_COLORS.bike } }),
+              /*#__PURE__*/React.createElement("div", { style: { height: swimH + "%", background: SPORT_COLORS.swim } })
+            )
+          );
+        })
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted } },
+        weekData.map((w, i) => /*#__PURE__*/React.createElement("div", {
+          key: i,
+          style: { flex: 1, textAlign: "center", overflow: "hidden", whiteSpace: "nowrap" }
+        }, (i % Math.ceil(weeksBack / 8) === 0) ? w.week.slice(5) : ""))
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" } },
+        [{ c: SPORT_COLORS.run, l: "🏃 Løp" }, { c: SPORT_COLORS.bike, l: "🚴 Sykkel" }, { c: SPORT_COLORS.swim, l: "🏊 Svøm" }].map(x => /*#__PURE__*/React.createElement("div", {
+          key: x.l, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.muted }
+        },
+          /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: x.c } }), x.l))
+      )
+    ),
+
+    // Weekly table breakdown
+    /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "UKESOVERSIKT"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 700, color: C.muted, paddingBottom: 6, borderBottom: "1px solid " + C.border } },
+        /*#__PURE__*/React.createElement("div", null, "Uke fra"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.accent } }, "🏃"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.orange } }, "🚴"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.lightblue } }, "🏊"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } }, "Sum")
+      ),
+      [...weekData].reverse().filter(w => w.total > 0).map((w, i) => /*#__PURE__*/React.createElement("div", {
+        key: i,
+        style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: "1px solid " + C.border }
+      },
+        /*#__PURE__*/React.createElement("div", { style: { color: C.text, fontWeight: 600 } }, w.week.slice(5)),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.run > 0 ? fmtVal(w.run) : "–"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.bike > 0 ? fmtVal(w.bike) : "–"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.swim > 0 ? fmtVal(w.swim) : "–"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", fontWeight: 700, color: C.text } }, fmtVal(w.total))
+      )),
+      totalAll === 0 && /*#__PURE__*/React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 20, fontSize: 13 } }, "Ingen økter registrert ennå")
+    )
+  );
+}
+
 function App() {
   const [tab, setTab] = React.useState("dashboard");
+  const [authRole, setAuthRole] = React.useState(() => {
+    try { return sessionStorage.getItem("nm_auth_role") || null; } catch { return null; }
+  });
+  const [loginPw, setLoginPw] = React.useState("");
+  const [loginErr, setLoginErr] = React.useState("");
+  function doLogin() {
+    if (loginPw === "FrankfurtMaraton251026") {
+      setAuthRole("admin");
+      try { sessionStorage.setItem("nm_auth_role", "admin"); } catch {}
+      setLoginErr(""); setLoginPw("");
+    } else if (loginPw === ".") {
+      setAuthRole("viewer");
+      try { sessionStorage.setItem("nm_auth_role", "viewer"); } catch {}
+      setLoginErr(""); setLoginPw("");
+    } else {
+      setLoginErr("Feil passord. Prøv igjen.");
+    }
+  }
+  function doLogout() {
+    setAuthRole(null);
+    try { sessionStorage.removeItem("nm_auth_role"); } catch {}
+  }
+  const isAdmin = authRole === "admin";
   const [sessions, setSessions] = useStore("nm_sessions", []);
   const [morningData, setMorningData] = useStore("nm_morning", {});
   const [goals, setGoals] = useStore("nm_goals", []);
@@ -6236,6 +6537,10 @@ function App() {
     icon: "✍️",
     label: "Logg"
   }, {
+    id: "stats",
+    icon: "📈",
+    label: "Statistikk"
+  }, {
     id: "strength",
     icon: "💪",
     label: "Styrke"
@@ -6261,7 +6566,8 @@ function App() {
             plannedSessions: plannedSessions,
             profile: profile,
             prefs: prefs,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin
           });
         case "calendar":
           return /*#__PURE__*/React.createElement(CalendarTab, {
@@ -6272,7 +6578,8 @@ function App() {
             goals: goals,
             profile: profile,
             prefs: prefs,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin
           });
         case "log":
           return /*#__PURE__*/React.createElement(LogTab, {
@@ -6280,13 +6587,19 @@ function App() {
             setSessions: setSessions,
             goals: goals,
             profile: profile,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin
+          });
+        case "stats":
+          return /*#__PURE__*/React.createElement(StatsTab, {
+            sessions: sessions
           });
         case "strength":
           return /*#__PURE__*/React.createElement(StrengthTab, {
             strengthLog: strengthLog,
             setStrengthLog: setStrengthLog,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin
           });
         case "goals":
           return /*#__PURE__*/React.createElement(GoalsTab, {
@@ -6294,7 +6607,8 @@ function App() {
             setGoals: setGoals,
             sessions: sessions,
             profile: profile,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin
           });
         case "profile":
           return /*#__PURE__*/React.createElement(ProfileTab, {
@@ -6306,7 +6620,9 @@ function App() {
             setPrefs: setPrefs,
             goals: goals,
             plannedSessions: plannedSessions,
-            userId: userId
+            userId: userId,
+            isAdmin: isAdmin,
+            doLogout: doLogout
           });
         default:
           return null;
@@ -6320,6 +6636,43 @@ function App() {
       }, /*#__PURE__*/React.createElement("b", null, "Feil i visning:"), /*#__PURE__*/React.createElement("br", null), String(e.message));
     }
   }
+  // Login gate — must authenticate before seeing the app
+  if (!authRole) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: C.bg, minHeight: "100vh", display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center", padding: 24,
+        fontFamily: "'Segoe UI',system-ui,sans-serif", color: C.text
+      }
+    },
+      /*#__PURE__*/React.createElement("div", {
+        style: { width: 60, height: 60, borderRadius: 16, background: C.accent + "18", border: `2px solid ${C.accent}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30, marginBottom: 20 }
+      }, "\uD83C\uDFC3"),
+      /*#__PURE__*/React.createElement("h1", { style: { fontSize: 22, fontWeight: 800, marginBottom: 6 } }, "Treningsdagbok"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 24 } }, "Logg inn for å fortsette"),
+      /*#__PURE__*/React.createElement("div", { style: { width: "100%", maxWidth: 320 } },
+        /*#__PURE__*/React.createElement("input", {
+          type: "password",
+          value: loginPw,
+          onChange: e => setLoginPw(e.target.value),
+          onKeyDown: e => { if (e.key === "Enter") doLogin(); },
+          placeholder: "Passord",
+          style: {
+            width: "100%", boxSizing: "border-box", background: C.surface, border: `1.5px solid ${loginErr ? C.red : C.border}`,
+            borderRadius: 10, padding: "12px 14px", fontSize: 15, color: C.text, outline: "none", marginBottom: 10
+          }
+        }),
+        loginErr && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.red, marginBottom: 10 } }, loginErr),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: doLogin,
+          style: { width: "100%", border: "none", borderRadius: 10, padding: "12px 0", fontSize: 15, fontWeight: 700, cursor: "pointer", background: C.accent, color: "#fff" }
+        }, "Logg inn"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 16, textAlign: "center", lineHeight: 1.6 } },
+          "Admin har full tilgang. Besøkende (passord «.») kan kun se innholdet.")
+      )
+    );
+  }
+
   return /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
