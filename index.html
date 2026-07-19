@@ -4647,7 +4647,8 @@ function LogTab({
     setSessions(p => [...p.filter(s => s.id !== form.id), {
       ...form,
       id: form.id || Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      userEdited: true
     }].sort((a, b) => b.date.localeCompare(a.date)), userId);
     setSaved(true);
     setEditId(null);
@@ -6033,13 +6034,21 @@ function ProfileTab({
         return s;
       });
 
-      // For NEW interval sessions (not already synced with splits), fetch the
-      // per-rep splits and a light chart stream from intervals.icu, so the
-      // log entry arrives with rundetider already filled in.
-      const existingIcuIds = new Set(sessions.filter(s => s.icuId).map(s => s.icuId));
-      const needsDetail = refined.filter(s => s.type === "intervals" && s.icuId && !existingIcuIds.has(s.icuId));
+      // Fetch per-rep splits + chart streams for interval sessions that don't
+      // have them yet. This now covers BOTH brand-new sessions AND already-synced
+      // interval sessions that were imported before detail-fetching existed
+      // (i.e. they have an icuId but no intervals/streams stored).
+      const localByIcuId = {};
+      sessions.forEach(s => { if (s.icuId) localByIcuId[s.icuId] = s; });
+      const needsDetail = refined.filter(s => {
+        if (s.type !== "intervals" || !s.icuId) return false;
+        const existing = localByIcuId[s.icuId];
+        // Needs detail if new, or if the stored copy is still missing splits/streams
+        const hasDetail = existing && ((existing.intervals && existing.intervals.length > 0) || existing.streams);
+        return !hasDetail;
+      });
       let detailCount = 0;
-      for (const s of needsDetail.slice(0, 15)) { // cap per sync to be gentle on rate limits
+      for (const s of needsDetail.slice(0, 20)) { // cap per sync to be gentle on rate limits
         try {
           const dRes = await fetch(`${base}/api/activity-detail?id=${s.icuId}&include=intervals,streams`, { headers });
           if (dRes.ok) {
@@ -6050,14 +6059,23 @@ function ProfileTab({
         } catch (e) { /* best-effort, skip on failure */ }
       }
 
-      // Merge activities (dedupe by icuId; newest edit wins)
+      // Merge activities (dedupe by icuId). Rules:
+      //  - If YOU manually edited the local copy (userEdited flag), keep yours.
+      //  - Otherwise the fresh backend copy wins, so corrected types and newly
+      //    fetched splits/streams replace the old auto-imported version.
+      //  - Preserve any detail already stored locally if the fresh copy lacks it.
       const icuIds = new Set(refined.map(s => s.icuId));
       setSessions(p => {
         const localByIcu = {};
         p.forEach(s => { if (s.icuId) localByIcu[s.icuId] = s; });
         const mergedIcu = refined.map(fresh => {
           const local = localByIcu[fresh.icuId];
-          if (local && (local.updatedAt || 0) > (fresh.updatedAt || 0)) return local;
+          if (local && local.userEdited) return local; // respect manual edits
+          // carry over locally-stored detail if this fresh copy didn't fetch it
+          if (local) {
+            if ((!fresh.intervals || !fresh.intervals.length) && local.intervals && local.intervals.length) fresh.intervals = local.intervals;
+            if (!fresh.streams && local.streams) fresh.streams = local.streams;
+          }
           return fresh;
         });
         const merged = [...p.filter(s => !s.icuId || !icuIds.has(s.icuId)), ...mergedIcu].sort((a, b) => b.date.localeCompare(a.date));
