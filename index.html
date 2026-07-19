@@ -3045,6 +3045,33 @@ function QuickLogModal({
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function dagsformVerdict(feel, hr, hrv, sleep, profile) {
+  const f = parseFloat(feel) || 3;
+  const normHrv = parseFloat(profile?.normHrv) || 65, normHr = parseFloat(profile?.normHr) || 50;
+  let score = f;
+  const notes = [];
+  if (hrv) {
+    const d = (parseFloat(hrv) - normHrv) / normHrv * 100;
+    if (d < -15) { score -= 1; notes.push("HRV under norm"); }
+    else if (d > 15) { score += 0.5; notes.push("HRV over norm"); }
+  }
+  if (hr) {
+    const d = parseFloat(hr) - normHr;
+    if (d > 7) { score -= 1; notes.push("forhøyet hvilepuls"); }
+    else if (d < -5) { score += 0.25; notes.push("lav hvilepuls"); }
+  }
+  if (sleep) {
+    const s = parseFloat(sleep);
+    if (s < 6) { score -= 0.5; notes.push("lite søvn"); }
+    else if (s >= 8) { score += 0.25; notes.push("god søvn"); }
+  }
+  const noteStr = notes.length ? ` (${notes.join(", ")})` : "";
+  if (score <= 1.5) return { verdict: "Ta det rolig i dag", detail: `Kroppen signaliserer behov for hvile eller lett aktivitet${noteStr}. Vurder å bytte til en rolig økt eller hvile helt.`, color: C.red };
+  if (score <= 2.5) return { verdict: "Moderat dag", detail: `Grei nok form${noteStr}, men ikke press for hardt. Følg planen, men vær klar til å justere ned om det trengs.`, color: C.yellow };
+  if (score <= 3.75) return { verdict: "Grei dag for trening", detail: `Vanlig form${noteStr}. Kjør planlagt økt som normalt.`, color: C.accent };
+  return { verdict: "God dag for trening! 🔥", detail: `Gode forutsetninger${noteStr} – fint tidspunkt for en kvalitetsøkt hvis planen tilsier det.`, color: C.green };
+}
+
 function DashboardTab({
   sessions,
   setSessions,
@@ -3338,7 +3365,15 @@ function DashboardTab({
       border: `1.5px solid ${feel === String(n) ? C.accent : C.border}`,
       fontSize: 16
     }
-  }, ["😴", "😕", "😐", "😊", "🔥"][n - 1])))), /*#__PURE__*/React.createElement(Btn, {
+  }, ["😴", "😕", "😐", "😊", "🔥"][n - 1])))), (() => {
+    const v = dagsformVerdict(feel, hr, hrv, sleep, profile);
+    return /*#__PURE__*/React.createElement("div", {
+      style: { background: v.color + "12", border: `1px solid ${v.color}33`, borderRadius: 8, padding: "8px 10px", marginTop: 8 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: v.color } }, v.verdict),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 2 } }, v.detail)
+    );
+  })(), /*#__PURE__*/React.createElement(Btn, {
     onClick: saveMorning,
     small: true,
     color: C.green,
@@ -6926,6 +6961,10 @@ function App() {
     if (!data) return false;
     let ok = false;
     if (data.nm_sessions?.length) {
+      // If Strava is turned off, never let Strava-sourced sessions back in —
+      // regardless of whether they come from stale cloud data, a delayed
+      // sync, or anything else. This is the source of truth for "off".
+      const stravaOff = data.nm_strava_enabled != null ? data.nm_strava_enabled === false : stravaEnabled === false;
       setSessions(prev => {
         // Merge by id: newest version wins (by updatedAt timestamp).
         // This lets edits made on one device propagate to others,
@@ -6933,6 +6972,7 @@ function App() {
         const byId = {};
         prev.forEach(s => { byId[s.id] = s; });
         data.nm_sessions.forEach(cloud => {
+          if (stravaOff && cloud.stravaId) return; // don't reintroduce while disabled
           const local = byId[cloud.id];
           if (!local) {
             byId[cloud.id] = cloud; // new from cloud
@@ -6943,7 +6983,9 @@ function App() {
             byId[cloud.id] = cloudT >= localT ? cloud : local;
           }
         });
-        return Object.values(byId).sort((a, b) => b.date.localeCompare(a.date));
+        let merged = Object.values(byId);
+        if (stravaOff) merged = merged.filter(s => !s.stravaId); // scrub any that slipped in from local state too
+        return merged.sort((a, b) => b.date.localeCompare(a.date));
       });
       ok = true;
     }
@@ -7001,6 +7043,21 @@ function App() {
       setTimeout(() => setSyncStatus(""), 4000);
     }).catch(() => setSyncStatus("⚠️ Sync feilet"));
   }, []);
+
+  // Safety net: whenever Strava is off, make sure no Strava-tagged sessions
+  // remain in local state, no matter how they got there (stale cloud merge,
+  // an old sync running again, etc.).
+  React.useEffect(() => {
+    if (stravaEnabled === false) {
+      setSessions(prev => {
+        const hasStrava = prev.some(s => s.stravaId);
+        if (!hasStrava) return prev;
+        const filtered = prev.filter(s => !s.stravaId);
+        if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_sessions", filtered);
+        return filtered;
+      });
+    }
+  }, [stravaEnabled]);
   function manualSync() {
     const u = userId;
     if (!sbUrl() || !sbKey() || !u) {
