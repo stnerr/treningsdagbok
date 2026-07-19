@@ -4518,6 +4518,40 @@ function analyzeSession(session, goals, profile) {
 }
 
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
+// Simple inline pace/HR chart for a single session, drawn from intervals.icu
+// streams (downsampled server-side). Shows heart rate as a filled line and,
+// if available, pace as a secondary line — enough to see drift/pacing
+// pattern within the session without needing a full charting library.
+function SessionChart({ streams }) {
+  const hr = (streams.heartrate || []).filter(v => v != null);
+  const pace = (streams.pace || []).filter(v => v != null);
+  if (hr.length < 3 && pace.length < 3) return null;
+  const W = 320, H = 90, pad = 4;
+  function pathFor(vals) {
+    if (vals.length < 2) return "";
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = max - min || 1;
+    return vals.map((v, i) => {
+      const x = pad + (i / (vals.length - 1)) * (W - pad * 2);
+      const y = pad + (1 - (v - min) / range) * (H - pad * 2);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(" ");
+  }
+  return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 4 } }, "PULS/TEMPO UNDER ØKTEN"),
+    /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 8 } },
+      hr.length >= 3 && /*#__PURE__*/React.createElement("path", { d: pathFor(hr), fill: "none", stroke: C.red, strokeWidth: 1.5 }),
+      pace.length >= 3 && /*#__PURE__*/React.createElement("path", { d: pathFor(pace), fill: "none", stroke: C.accent, strokeWidth: 1.5, strokeDasharray: "3 2" })
+    ),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 4 } },
+      hr.length >= 3 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: C.muted } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 2, background: C.red } }), "Puls"),
+      pace.length >= 3 && /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: C.muted } },
+        /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 2, background: C.accent } }), "Tempo")
+    )
+  );
+}
+
 function LogTab({
   sessions,
   setSessions: _setSessions,
@@ -5153,7 +5187,7 @@ function LogTab({
         color: m.startsWith("⚠️") || m.startsWith("🔴") ? C.red : m.startsWith("✅") || m.startsWith("🏆") ? C.green : C.text,
         padding: "2px 0"
       }
-    }, m))), s.intervals?.filter(iv => !iv.isPause).length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    }, m))), s.streams && (s.streams.heartrate?.length > 2 || s.streams.pace?.length > 2) && /*#__PURE__*/React.createElement(SessionChart, { streams: s.streams }), s.intervals?.filter(iv => !iv.isPause).length > 0 && /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.accent,
@@ -5999,6 +6033,23 @@ function ProfileTab({
         return s;
       });
 
+      // For NEW interval sessions (not already synced with splits), fetch the
+      // per-rep splits and a light chart stream from intervals.icu, so the
+      // log entry arrives with rundetider already filled in.
+      const existingIcuIds = new Set(sessions.filter(s => s.icuId).map(s => s.icuId));
+      const needsDetail = refined.filter(s => s.type === "intervals" && s.icuId && !existingIcuIds.has(s.icuId));
+      let detailCount = 0;
+      for (const s of needsDetail.slice(0, 15)) { // cap per sync to be gentle on rate limits
+        try {
+          const dRes = await fetch(`${base}/api/activity-detail?id=${s.icuId}&include=intervals,streams`, { headers });
+          if (dRes.ok) {
+            const detail = await dRes.json();
+            if (detail.intervals?.length) { s.intervals = detail.intervals; detailCount++; }
+            if (detail.streams) s.streams = detail.streams;
+          }
+        } catch (e) { /* best-effort, skip on failure */ }
+      }
+
       // Merge activities (dedupe by icuId; newest edit wins)
       const icuIds = new Set(refined.map(s => s.icuId));
       setSessions(p => {
@@ -6017,7 +6068,7 @@ function ProfileTab({
       const runs = refined.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
       const bikes = refined.filter(s => s.type === "bike").length;
       const other = refined.length - runs - bikes;
-      setIcuResult({ type: "success", msg: `✅ Hentet ${actData.sessions.length} økter (${runs} løp, ${bikes} sykkel${other>0?", "+other+" andre":""})${wellnessCount?` + ${wellnessCount} dager formdata`:""}.` });
+      setIcuResult({ type: "success", msg: `✅ Hentet ${actData.sessions.length} økter (${runs} løp, ${bikes} sykkel${other>0?", "+other+" andre":""})${wellnessCount?` + ${wellnessCount} dager formdata`:""}${detailCount>0?` · rundetider hentet for ${detailCount} intervalløkter`:""}.` });
     } catch (err) {
       setIcuResult({ type: "error", msg: "Feil: " + err.message });
     } finally {
