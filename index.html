@@ -5198,18 +5198,21 @@ function LogTab({
     }, "DRAG"), s.intervals.map((iv, i) => iv.isPause ? /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
+        display: "flex",
+        gap: 10,
+        padding: "2px 0",
         fontSize: 11,
-        color: C.yellow,
-        padding: "2px 0"
+        color: C.yellow
       }
-    }, "\u23F8 Pause: ", iv.dur) : /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", { style: { minWidth: 30 } }, "\u23F8"), /*#__PURE__*/React.createElement("span", null, "Pause"), (iv.dist || iv.dur) && /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, [iv.dist, iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", null, iv.pace, "/km"), iv.hr && /*#__PURE__*/React.createElement("span", null, iv.hr, "bpm")) : /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         display: "flex",
         gap: 12,
         padding: "4px 0",
         borderBottom: `1px solid ${C.border}`,
-        fontSize: 12
+        fontSize: 12,
+        flexWrap: "wrap"
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
@@ -5220,7 +5223,7 @@ function LogTab({
       style: {
         fontWeight: 600
       }
-    }, iv.dur), iv.pace && /*#__PURE__*/React.createElement("span", {
+    }, [iv.dist, iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.accent
       }
@@ -6021,18 +6024,12 @@ function ProfileTab({
         }
       } catch (e) { /* wellness optional */ }
 
-      // Refine run subtypes by matching against the planned calendar session for that date.
-      // If the plan for that day is a run-type (intervals/long/easy/race), use it.
-      const runTypes = ["easy", "intervals", "long", "race"];
-      const refined = actData.sessions.map(s => {
-        if (!runTypes.includes(s.type)) return s; // only refine runs
-        try {
-          const plans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, s.date) || [];
-          const plannedRun = plans.find(p => runTypes.includes(p.type));
-          if (plannedRun) return { ...s, type: plannedRun.type };
-        } catch (e) { /* fall through */ }
-        return s;
-      });
+      // Type classification comes entirely from the backend (based on the
+      // activity name, e.g. "Ints"). We deliberately do NOT override it with
+      // the planned calendar session, because a planned interval day doesn't
+      // mean the actual run was an interval session — the user wants the type
+      // driven only by the "Ints" naming convention.
+      const refined = actData.sessions;
 
       // Fetch per-rep splits + chart streams for interval sessions that don't
       // have them yet. This now covers BOTH brand-new sessions AND already-synced
