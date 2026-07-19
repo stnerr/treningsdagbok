@@ -141,7 +141,7 @@ function weeksUntil(s) {
 function addDays(s, n) {
   const d = new Date(s + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function fmtPace(m) {
   if (!m || isNaN(m)) return null;
@@ -1064,15 +1064,15 @@ const PROGRAMS = {
       6: [],
       0: []
     },
-    // UKE 14 + UKE 15 (NEDTRAPPING - kombinert ifølge kilde)
+    // UKE 14 (NEDTRAPPING)
     {
-      1: [],
-      2: [{
+      1: [{
         type: "intervals",
         label: "🏃 Terskel + fart",
         desc: "20 min (Effort 3), pause 2 min + 10×1 min, pause 30 sek · Moderat økt med kort pause",
         intensity: "medium"
       }],
+      2: [],
       3: [{
         type: "long",
         label: "🏔️ Langtur 2–2,5t",
@@ -1085,10 +1085,35 @@ const PROGRAMS = {
         desc: "30–40 min · Effort 1 · Legges mellom hardøkter",
         intensity: "easy"
       }],
-      5: [{
+      5: [],
+      6: [{
         type: "easy",
         label: "🌿 Lett jogg 30–40 min",
         desc: "30–40 min · Effort 1 · Legges mellom hardøkter",
+        intensity: "easy"
+      }],
+      0: []
+    },
+    // UKE 15 (NEDTRAPPING)
+    {
+      1: [{
+        type: "intervals",
+        label: "🏃 Tempo med flyt 6×6 min + SS",
+        desc: "6×6 min, pause 2 min (Effort3: 6min/Effort2: 2min) + smart-strides · Flytpause",
+        intensity: "medium"
+      }],
+      2: [],
+      3: [{
+        type: "intervals",
+        label: "🏃 Progressive intervaller 25×1 min",
+        desc: "25×1 min, pause 30 sek · Effort 3→4 · Kom i flyt på høyere fart. Løp kontrollert så nært løpet",
+        intensity: "hard"
+      }],
+      4: [],
+      5: [{
+        type: "easy",
+        label: "🌿 Lett jogg 2t",
+        desc: "2 timer · Effort 1 · Lett jogg, men med litt varighet",
         intensity: "easy"
       }],
       6: [],
@@ -2171,13 +2196,41 @@ const PROGRAMS = {
     }]
   }
 };
-function getProgramSession(progKey, startDate, dateStr) {
+function findProgramRaceDayOffset(prog, progKey) {
+  // Scans a program's weeks for the "LØPSDAG" session and returns how many
+  // days after week-1's Monday it actually falls (accounting for any
+  // per-program day-shift, like bakken_100days).
+  for (let weekIdx = 0; weekIdx < prog.weeks.length; weekIdx++) {
+    const week = prog.weeks[weekIdx];
+    for (const rawDowKey of Object.keys(week)) {
+      const sessions = week[rawDowKey];
+      if (sessions && sessions.some(s => s.label && s.label.includes("LØPSDAG"))) {
+        let displayDow = parseInt(rawDowKey, 10);
+        if (progKey === "bakken_100days") {
+          displayDow = (displayDow - 1 + 7) % 7; // inverse of the +1 shift used for lookup
+        }
+        const dayOffsetInWeek = displayDow === 0 ? 6 : displayDow - 1; // Monday=0..Sunday=6
+        return weekIdx * 7 + dayOffsetInWeek;
+      }
+    }
+  }
+  return null;
+}
+
+function programStartFromEndDate(progKey, endDate) {
   const prog = PROGRAMS[progKey];
+  if (!prog || !endDate) return null;
+  const offset = findProgramRaceDayOffset(prog, progKey);
+  if (offset == null) return null;
+  const raceD = new Date(endDate + "T00:00:00");
+  raceD.setDate(raceD.getDate() - offset);
+  return `${raceD.getFullYear()}-${String(raceD.getMonth() + 1).padStart(2, "0")}-${String(raceD.getDate()).padStart(2, "0")}`;
+}
+
+function getProgramSessionFromProg(prog, progKey, startDate, dateStr) {
   if (!prog || prog.isAuto || !startDate || !dateStr) return null;
-  // Snap startDate to the Monday of its week, so the program's week 1 always begins on a Monday
-  // regardless of which weekday the user picked in the date field.
   const startD = dow(startDate);
-  const mondayOffset = startD === 0 ? -6 : 1 - startD; // days to subtract/add to reach Monday
+  const mondayOffset = startD === 0 ? -6 : 1 - startD;
   const startMonday = addDays(startDate, mondayOffset);
   const daysDiff = Math.round((new Date(dateStr + "T00:00:00") - new Date(startMonday + "T00:00:00")) / 86400000);
   if (daysDiff < 0) return null;
@@ -2185,19 +2238,173 @@ function getProgramSession(progKey, startDate, dateStr) {
   if (weekIdx >= prog.weeks.length) return null;
   const weekPlan = prog.weeks[weekIdx];
   let lookupDow = dow(dateStr);
-  // Bakken 100-days: shift all sessions one day earlier (intervals start Monday,
-  // long runs land Saturday). So the session shown on a given day is the one that
-  // was originally keyed to the NEXT day.
   if (progKey === "bakken_100days") {
-    lookupDow = (lookupDow + 1) % 7; // Mon(1)->Tue(2), ... Sat(6)->Sun(0), Sun(0)->Mon(1)
+    lookupDow = (lookupDow + 1) % 7;
   }
   return weekPlan[lookupDow] || [];
 }
+
+function getProgramSession(progKey, startDate, dateStr) {
+  return getProgramSessionFromProg(PROGRAMS[progKey], progKey, startDate, dateStr);
+}
+
+function getEffectiveProgramDates(prefs) {
+  const prog = PROGRAMS[prefs?.program];
+  if (!prog) return { start: null, end: null };
+  if (prefs?.programDateMode === "end" && prefs?.programEndDate) {
+    const start = programStartFromEndDate(prefs.program, prefs.programEndDate);
+    return { start, end: prefs.programEndDate };
+  }
+  if (prefs?.programStartDate) {
+    const d0 = dow(prefs.programStartDate);
+    const mondayOffset = d0 === 0 ? -6 : 1 - d0;
+    const startMonday = addDays(prefs.programStartDate, mondayOffset);
+    const offset = findProgramRaceDayOffset(prog, prefs.program);
+    const end = offset != null ? addDays(startMonday, offset) : null;
+    return { start: startMonday, end };
+  }
+  return { start: null, end: null };
+}
+
+function findWeekIndexWithLabel(weeks, needle) {
+  for (let i = 0; i < weeks.length; i++) {
+    const week = weeks[i];
+    for (const k of Object.keys(week)) {
+      if ((week[k] || []).some(s => s.label && s.label.includes(needle))) return i;
+    }
+  }
+  return null;
+}
+
+// Adapts the bakken_100days plan around an intermediate goal race (e.g. a half
+// marathon before the marathon). It reuses the plan's built-in "Testløp
+// Halvmaraton" slot (normally 4 weeks before race day) and, if the real
+// calendar gap between the goal race and the final race differs from 4 weeks,
+// inserts or removes buffer weeks right before the final taper week so the
+// calendar lines up — the same technique used in the hand-adjusted plan.
+function alignBakkenRaceDay(weeks, endDate) {
+  // Moves the LØPSDAG session within its week to the raw day-key matching
+  // endDate's real weekday (a real race has a fixed weekday, e.g. Sunday,
+  // which may differ from the program's built-in Saturday slot).
+  if (!endDate) return weeks;
+  const raceWeekIdx = findWeekIndexWithLabel(weeks, "LØPSDAG");
+  if (raceWeekIdx == null) return weeks;
+  const newWeeks = weeks.map((w, i) => i === raceWeekIdx ? { ...w } : w);
+  const weekObj = newWeeks[raceWeekIdx];
+  let raceSession = null;
+  for (const k of Object.keys(weekObj)) {
+    const found = (weekObj[k] || []).find(s => s.label && s.label.includes("LØPSDAG"));
+    if (found) { raceSession = found; weekObj[k] = weekObj[k].filter(s => s !== found); }
+  }
+  if (raceSession) {
+    const targetDow = dow(endDate);
+    const rawKey = String((targetDow + 1) % 7);
+    weekObj[rawKey] = [...(weekObj[rawKey] || []), raceSession];
+  }
+  return newWeeks;
+}
+
+function buildAdjustedBakkenPlan(midGoal, endDate, baseWeeks) {
+  const baseProg = PROGRAMS.bakken_100days;
+  const sourceWeeks = baseWeeks || baseProg.weeks;
+  if (!midGoal || !midGoal.date || !endDate) return { ...baseProg, weeks: sourceWeeks };
+  const testWeekIdx = findWeekIndexWithLabel(sourceWeeks, "Testløp Halvmaraton");
+  const raceWeekIdx = findWeekIndexWithLabel(sourceWeeks, "LØPSDAG");
+  if (testWeekIdx == null || raceWeekIdx == null) return { ...baseProg, weeks: sourceWeeks };
+
+  const normalGapWeeks = raceWeekIdx - testWeekIdx;
+  const daysBetween = Math.round((new Date(endDate + "T00:00:00") - new Date(midGoal.date + "T00:00:00")) / 86400000);
+  const actualGapWeeks = Math.round(daysBetween / 7);
+  const diff = actualGapWeeks - normalGapWeeks;
+
+  let weeks = sourceWeeks.map(w => ({ ...w }));
+  let adjustedTestWeekIdx = testWeekIdx;
+
+  if (diff > 0) {
+    // Insert `diff` easy buffer weeks (clone of the week right before the
+    // final taper) so the extra calendar weeks are absorbed without touching
+    // the fixed taper structure closest to race day.
+    const template = { ...weeks[raceWeekIdx - 1] };
+    for (let i = 0; i < diff; i++) weeks.splice(raceWeekIdx, 0, template);
+  } else if (diff < 0) {
+    // Trim by removing the optional "Uke 3 (ekstra)" week if it exists before
+    // the test week — the plan's only built-in flexibility point.
+    const removableIdx = findWeekIndexWithLabel(baseProg.weeks, "UKE_3_EKSTRA_MARKER"); // not present; fall back below
+    const idx3ekstra = 5; // index of "Uke 3 (ekstra)" in bakken_100days
+    if (idx3ekstra < testWeekIdx) {
+      weeks.splice(idx3ekstra, Math.min(-diff, 1));
+      adjustedTestWeekIdx = testWeekIdx - 1;
+    }
+  }
+
+  // Replace the generic testløp session with the actual goal's details, AND
+  // move it to the raw day-key that matches the goal's real weekday (a real
+  // race has a fixed weekday, e.g. Sunday, which may differ from the
+  // program's built-in testløp slot).
+  const weekObj = { ...weeks[adjustedTestWeekIdx] };
+  let movedSession = null;
+  for (const k of Object.keys(weekObj)) {
+    const found = (weekObj[k] || []).find(s => s.label && s.label.includes("Testløp Halvmaraton"));
+    if (found) {
+      movedSession = { ...found, label: `🏆 ${midGoal.name}`, desc: `${midGoal.name}${midGoal.date ? " – " + formatDateShort(midGoal.date) : ""}. Mål: ${midGoal.targetTime || "personlig rekord"}.` };
+      weekObj[k] = weekObj[k].filter(s => s !== found); // remove from old slot
+    }
+  }
+  if (movedSession) {
+    const goalDow = dow(midGoal.date);
+    const rawKey = String((goalDow + 1) % 7); // inverse of bakken_100days display shift
+    weekObj[rawKey] = [...(weekObj[rawKey] || []), movedSession];
+  }
+  weeks[adjustedTestWeekIdx] = weekObj;
+
+  return { ...baseProg, weeks };
+}
+
 function getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, dateStr) {
   if (plannedSessions[dateStr] !== undefined) return plannedSessions[dateStr];
-  const prog = prefs?.program || "auto";
-  if (prog !== "auto") {
-    const result = getProgramSession(prog, prefs?.programStartDate, dateStr);
+  const progKey = prefs?.program || "auto";
+  if (progKey !== "auto") {
+    let prog = PROGRAMS[progKey];
+
+    // Determine the race day (end date) regardless of which mode the user picked,
+    // using the BASE program first (needed before we know if an adjustment applies).
+    let endDate = null;
+    if (prefs?.programDateMode === "end" && prefs?.programEndDate) {
+      endDate = prefs.programEndDate;
+    } else if (prefs?.programStartDate) {
+      const d0 = dow(prefs.programStartDate);
+      const mondayOffset0 = d0 === 0 ? -6 : 1 - d0;
+      const startMonday0 = addDays(prefs.programStartDate, mondayOffset0);
+      const offset0 = findProgramRaceDayOffset(prog, progKey);
+      endDate = offset0 != null ? addDays(startMonday0, offset0) : null;
+    }
+
+    // If a mid-goal race is set, build the adjusted plan (may insert/remove weeks).
+    // First align the base plan's race day to the real weekday of endDate
+    // (races have a fixed real-world weekday, e.g. Sunday), then layer the
+    // mid-goal adjustment on top of that aligned base.
+    if (progKey === "bakken_100days" && endDate) {
+      const alignedWeeks = alignBakkenRaceDay(PROGRAMS.bakken_100days.weeks, endDate);
+      if (prefs?.midGoalId) {
+        const midGoal = goals.find(g => String(g.id) === String(prefs.midGoalId));
+        prog = midGoal ? buildAdjustedBakkenPlan(midGoal, endDate, alignedWeeks) : { ...PROGRAMS.bakken_100days, weeks: alignedWeeks };
+      } else {
+        prog = { ...PROGRAMS.bakken_100days, weeks: alignedWeeks };
+      }
+    }
+
+    // Always derive the effective start date FROM the race day using the
+    // (possibly adjusted) program's own race-day offset. This way, inserting
+    // a buffer week automatically pushes the whole plan's start a week
+    // earlier — keeping the race day fixed at what the user specified,
+    // instead of letting it drift later.
+    let effectiveStart = prefs?.programStartDate;
+    if (endDate) {
+      const offset = findProgramRaceDayOffset(prog, progKey);
+      if (offset != null) effectiveStart = addDays(endDate, -offset);
+    }
+
+    const result = getProgramSessionFromProg(prog, progKey, effectiveStart, dateStr);
     if (result !== null) return result;
   }
   return getGoalSuggestions(goals, profile, prefs, dateStr);
@@ -2843,6 +3050,7 @@ function DashboardTab({
   setSessions,
   morningData,
   setMorningData,
+  wellness,
   goals,
   plannedSessions,
   profile,
@@ -2854,10 +3062,18 @@ function DashboardTab({
   const todayPlans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, today);
   const todaySessions = sessions.filter(s => s.date === today);
   const todayMorning = morningData[today] || {};
+  // intervals.icu wellness: today's row, or the most recent available
+  const wellnessSorted = (wellness || []).filter(w => w.restingHr != null || w.hrv != null).sort((a, b) => a.date.localeCompare(b.date));
+  const todayWellness = (wellness || []).find(w => w.date === today) || wellnessSorted[wellnessSorted.length - 1] || null;
+  const wHr = todayWellness && todayWellness.restingHr != null ? Math.round(todayWellness.restingHr) : null;
+  const wHrv = todayWellness && todayWellness.hrv != null ? Math.round(todayWellness.hrv) : null;
+  const wSleep = todayWellness && todayWellness.sleepHours != null ? todayWellness.sleepHours : null;
+  const wDate = todayWellness ? todayWellness.date : null;
   const [saving, setSaving] = React.useState(false);
-  const [hr, setHr] = React.useState(todayMorning.hr || "");
-  const [hrv, setHrv] = React.useState(todayMorning.hrv || "");
-  const [sleep, setSleep] = React.useState(todayMorning.sleep || "");
+  // Feeling (dagsform) stays manual; hr/hrv/sleep come from intervals.icu
+  const [hr, setHr] = React.useState(todayMorning.hr || (wHr != null ? String(wHr) : ""));
+  const [hrv, setHrv] = React.useState(todayMorning.hrv || (wHrv != null ? String(wHrv) : ""));
+  const [sleep, setSleep] = React.useState(todayMorning.sleep || (wSleep != null ? String(wSleep) : ""));
   const [feel, setFeel] = React.useState(todayMorning.feel || "3");
   const [quickLogPlan, setQuickLogPlan] = React.useState(null);
   const [showNut, setShowNut] = React.useState(false);
@@ -3080,39 +3296,29 @@ function DashboardTab({
       fontWeight: 700,
       marginBottom: 10
     }
-  }, "MORGENREGISTRERING"), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: 10
-    }
-  }, /*#__PURE__*/React.createElement(Inp, {
-    label: `Hvilepuls (norm: ${profile?.normHr || 50})`,
-    type: "number",
-    value: hr,
-    onChange: setHr,
-    placeholder: "bpm"
-  }), /*#__PURE__*/React.createElement(Inp, {
-    label: `HRV (norm: ${profile?.normHrv || 65})`,
-    type: "number",
-    value: hrv,
-    onChange: setHrv,
-    placeholder: "ms"
-  }), /*#__PURE__*/React.createElement(Inp, {
-    label: "S\xF8vn (timer)",
-    type: "number",
-    step: "0.5",
-    value: sleep,
-    onChange: setSleep,
-    placeholder: "7.5"
-  }), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "MORGENREGISTRERING"), todayWellness ? /*#__PURE__*/React.createElement("div", {
+    style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }
+  },
+    /*#__PURE__*/React.createElement("div", { style: { background: C.bg, borderRadius: 8, padding: "8px 10px" } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: C.muted, marginBottom: 2 } }, "Hvilepuls"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.text } }, wHr != null ? wHr : "–", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 400, color: C.muted } }, " bpm"))),
+    /*#__PURE__*/React.createElement("div", { style: { background: C.bg, borderRadius: 8, padding: "8px 10px" } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: C.muted, marginBottom: 2 } }, "HRV"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.text } }, wHrv != null ? wHrv : "–", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 400, color: C.muted } }, " ms"))),
+    /*#__PURE__*/React.createElement("div", { style: { background: C.bg, borderRadius: 8, padding: "8px 10px" } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: C.muted, marginBottom: 2 } }, "Søvn"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 16, fontWeight: 800, color: C.text } }, wSleep != null ? wSleep : "–", /*#__PURE__*/React.createElement("span", { style: { fontSize: 10, fontWeight: 400, color: C.muted } }, " t")))
+  ) : /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: C.muted, background: C.bg, borderRadius: 8, padding: 10, marginBottom: 12 }
+  }, "Ingen helsedata fra intervals.icu ennå. Koble til og synkroniser under Profil, så hentes hvilepuls, HRV og søvn automatisk."),
+  /*#__PURE__*/React.createElement("div", { style: { marginBottom: 4 } }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: C.muted,
       fontWeight: 600,
       marginBottom: 6
     }
-  }, "Dagsform"), /*#__PURE__*/React.createElement("div", {
+  }, "Dagsform (hvordan føler du deg?)"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 4
@@ -3132,14 +3338,14 @@ function DashboardTab({
       border: `1.5px solid ${feel === String(n) ? C.accent : C.border}`,
       fontSize: 16
     }
-  }, ["😴", "😕", "😐", "😊", "🔥"][n - 1]))))), /*#__PURE__*/React.createElement(Btn, {
+  }, ["😴", "😕", "😐", "😊", "🔥"][n - 1])))), /*#__PURE__*/React.createElement(Btn, {
     onClick: saveMorning,
     small: true,
     color: C.green,
     style: {
-      marginTop: 4
+      marginTop: 8
     }
-  }, saving ? "Lagret ✓" : "Lagre morgendata")), /*#__PURE__*/React.createElement("div", {
+  }, saving ? "Lagret ✓" : "Lagre dagsform")), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "grid",
       gridTemplateColumns: "repeat(2,1fr)",
@@ -5745,12 +5951,25 @@ function ProfileTab({
         }
       } catch (e) { /* wellness optional */ }
 
+      // Refine run subtypes by matching against the planned calendar session for that date.
+      // If the plan for that day is a run-type (intervals/long/easy/race), use it.
+      const runTypes = ["easy", "intervals", "long", "race"];
+      const refined = actData.sessions.map(s => {
+        if (!runTypes.includes(s.type)) return s; // only refine runs
+        try {
+          const plans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, s.date) || [];
+          const plannedRun = plans.find(p => runTypes.includes(p.type));
+          if (plannedRun) return { ...s, type: plannedRun.type };
+        } catch (e) { /* fall through */ }
+        return s;
+      });
+
       // Merge activities (dedupe by icuId; newest edit wins)
-      const icuIds = new Set(actData.sessions.map(s => s.icuId));
+      const icuIds = new Set(refined.map(s => s.icuId));
       setSessions(p => {
         const localByIcu = {};
         p.forEach(s => { if (s.icuId) localByIcu[s.icuId] = s; });
-        const mergedIcu = actData.sessions.map(fresh => {
+        const mergedIcu = refined.map(fresh => {
           const local = localByIcu[fresh.icuId];
           if (local && (local.updatedAt || 0) > (fresh.updatedAt || 0)) return local;
           return fresh;
@@ -5760,9 +5979,9 @@ function ProfileTab({
         return merged;
       }, userId);
 
-      const runs = actData.sessions.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
-      const bikes = actData.sessions.filter(s => s.type === "bike").length;
-      const other = actData.sessions.length - runs - bikes;
+      const runs = refined.filter(s => ["easy","intervals","long","race"].includes(s.type)).length;
+      const bikes = refined.filter(s => s.type === "bike").length;
+      const other = refined.length - runs - bikes;
       setIcuResult({ type: "success", msg: `✅ Hentet ${actData.sessions.length} økter (${runs} løp, ${bikes} sykkel${other>0?", "+other+" andre":""})${wellnessCount?` + ${wellnessCount} dager formdata`:""}.` });
     } catch (err) {
       setIcuResult({ type: "error", msg: "Feil: " + err.message });
@@ -5969,15 +6188,36 @@ function ProfileTab({
         color: C.yellow
       }
     }, "Effort-soner (% av makspuls ", max, "):"), /*#__PURE__*/React.createElement("br", null), "Effort 1: ", Math.round(max * .60), "\u2013", Math.round(max * .72), " bpm (veldig lett) \xB7 Effort 2: ", Math.round(max * .72), "\u2013", Math.round(max * .80), " bpm (lett)", /*#__PURE__*/React.createElement("br", null), "Effort 3: ", Math.round(max * .80), "\u2013", Math.round(max * .87), " bpm (moderat) \xB7 Effort 4: ", Math.round(max * .87), "\u2013", Math.round(max * .92), " bpm (hardt)", /*#__PURE__*/React.createElement("br", null), "Effort 5: ", Math.round(max * .92), "\u2013", Math.round(max * .97), " bpm (veldig hardt)");
-  })(), /*#__PURE__*/React.createElement(Inp, {
-    label: "Startdato (programmet starter automatisk p\xE5 mandag i denne uken)",
+  })(), prefs.program === "bakken_100days" && /*#__PURE__*/React.createElement("div", { style: { marginBottom: 10 } },
+    /*#__PURE__*/React.createElement(Sel, {
+      label: "Delmål underveis (valgfritt, f.eks. et halvmaraton før maraton)",
+      value: prefs?.midGoalId || "",
+      onChange: v => setPrefs(p => ({ ...p, midGoalId: v || null }), userId),
+      options: [{ value: "", label: "Ingen \u2013 kun sluttmålet" }, ...goals.map(g => ({ value: String(g.id), label: `${g.name} (${formatDateShort(g.date)})` }))]
+    }),
+    prefs?.midGoalId && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, background: C.bg, borderRadius: 8, padding: 10 } },
+      "Planen setter dette l\u00f8pet inn i programmets testl\u00f8p-uke (normalt 4 uker f\u00f8r sluttm\u00e5let), og legger automatisk til eller fjerner buffer-uker hvis kalenderavstanden ikke er akkurat 4 uker \u2013 slik at datoene stemmer.")
+  ), /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, background: C.bg, borderRadius: 10, padding: 4 } },
+    [["start","Jeg vet startdato"],["end","Jeg vet løpsdato"]].map(([m,l]) => /*#__PURE__*/React.createElement("button", {
+      key: m,
+      onClick: () => setPrefs(p => ({ ...p, programDateMode: m }), userId),
+      style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: (prefs?.programDateMode || "start") === m ? C.surface : "transparent", color: (prefs?.programDateMode || "start") === m ? C.accent : C.muted, boxShadow: (prefs?.programDateMode || "start") === m ? C.shadow : "none" }
+    }, l))
+  ), (prefs?.programDateMode === "end") ? /*#__PURE__*/React.createElement(Inp, {
+    label: "Løpsdato (siste dag i programmet)",
+    type: "date",
+    value: prefs?.programEndDate || "",
+    onChange: v => setPrefs(p => ({ ...p, programEndDate: v }), userId),
+    placeholder: "ÅÅÅÅ-MM-DD"
+  }) : /*#__PURE__*/React.createElement(Inp, {
+    label: "Startdato (programmet starter automatisk på mandag i denne uken)",
     type: "date",
     value: prefs?.programStartDate || "",
     onChange: v => setPrefs(p => ({
       ...p,
       programStartDate: v
     }), userId),
-    placeholder: "\xC5\xC5\xC5\xC5-MM-DD"
+    placeholder: "ÅÅÅÅ-MM-DD"
   }), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
@@ -5986,10 +6226,14 @@ function ProfileTab({
       borderRadius: 8,
       padding: 10
     }
-  }, "Velg en hvilken som helst dato i uke 1 \u2013 appen starter automatisk programmet p\xE5 ", /*#__PURE__*/React.createElement("b", null, "mandagen i den uken"), ". Merk: mange programmer har mandag som fast hviledag, s\xE5 f\xF8rste \xF8kt vises gjerne tirsdag.", prefs?.programStartDate && (() => {
-    const d0 = dow(prefs.programStartDate);
+  }, prefs?.programDateMode === "end" ? "Appen regner ut når programmet må starte, ut fra løpsdatoen." : "Velg en hvilken som helst dato i uke 1 – appen starter automatisk programmet på ", prefs?.programDateMode !== "end" && /*#__PURE__*/React.createElement("b", null, "mandagen i den uken"), prefs?.programDateMode !== "end" && ". Merk: mange programmer har mandag som fast hviledag, så første økt vises gjerne tirsdag.", (() => {
+    const effectiveStart = prefs?.programDateMode === "end" && prefs?.programEndDate
+      ? programStartFromEndDate(prefs.program, prefs.programEndDate)
+      : prefs?.programStartDate;
+    if (!effectiveStart) return null;
+    const d0 = dow(effectiveStart);
     const mondayOffset = d0 === 0 ? -6 : 1 - d0;
-    const startMonday = addDays(prefs.programStartDate, mondayOffset);
+    const startMonday = addDays(effectiveStart, mondayOffset);
     const wk = Math.floor((new Date() - new Date(startMonday + "T00:00:00")) / (7 * 86400000)) + 1;
     const prog = PROGRAMS[prefs.program];
     if (wk >= 1 && prog && wk <= prog.weeks?.length) return /*#__PURE__*/React.createElement("span", {
@@ -5997,12 +6241,12 @@ function ProfileTab({
         color: C.green,
         fontWeight: 700
       }
-    }, " N\xE5: uke ", wk, " av ", prog.weeks.length, " (uke 1 starter ", formatDateShort(startMonday), ").");
+    }, " Nå: uke ", wk, " av ", prog.weeks.length, " (uke 1 starter ", formatDateShort(startMonday), ").");
     if (wk > prog?.weeks?.length) return /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.muted
       }
-    }, " Programmet er fullf\xF8rt!");
+    }, " Programmet er fullført!");
     if (wk < 1) return /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.accent
@@ -6244,7 +6488,18 @@ function ProfileTab({
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#FC4C02", fontWeight: 700 } }, "\uD83D\uDFE0 STRAVA"),
       /*#__PURE__*/React.createElement("button", {
-        onClick: () => setStravaEnabled(!stravaEnabled, userId),
+        onClick: () => {
+          const turningOff = stravaEnabled;
+          setStravaEnabled(!stravaEnabled, userId);
+          if (turningOff) {
+            // Remove Strava-sourced sessions to avoid duplicates with intervals.icu
+            setSessions(p => {
+              const filtered = p.filter(s => !s.stravaId);
+              if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_sessions", filtered);
+              return filtered;
+            }, userId);
+          }
+        },
         style: { border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", background: stravaEnabled ? "#FC4C02" : C.border, color: stravaEnabled ? "#fff" : C.muted }
       }, stravaEnabled ? "PÅ" : "AV")
     ),
@@ -6425,10 +6680,9 @@ function FormTab({ wellness, sessions, goals }) {
 
 function StatsTab({ sessions }) {
   const [metric, setMetric] = React.useState("km"); // "km" or "time"
-  const [weeksBack, setWeeksBack] = React.useState(12);
+  const [grouping, setGrouping] = React.useState("week"); // "week" or "month"
+  const [periods, setPeriods] = React.useState(12);
 
-  // Build week buckets (Monday-based). Use LOCAL date parts (not toISOString,
-  // which shifts the date in non-UTC timezones and breaks bucket matching).
   function fmtLocal(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
@@ -6439,24 +6693,38 @@ function StatsTab({ sessions }) {
     d.setDate(d.getDate() + offset);
     return fmtLocal(d);
   }
+  function monthKey(dateStr) {
+    return dateStr.slice(0, 7); // YYYY-MM
+  }
   function isRun(t) { return ["easy", "intervals", "long", "race"].includes(t); }
 
   const now = new Date();
-  const thisMonday = mondayOf(fmtLocal(now));
-  const weeks = [];
-  for (let i = weeksBack - 1; i >= 0; i--) {
-    const m = new Date(thisMonday + "T00:00:00");
-    m.setDate(m.getDate() - i * 7);
-    weeks.push(fmtLocal(m));
+  const buckets = [];
+  if (grouping === "week") {
+    const thisMonday = mondayOf(fmtLocal(now));
+    for (let i = periods - 1; i >= 0; i--) {
+      const m = new Date(thisMonday + "T00:00:00");
+      m.setDate(m.getDate() - i * 7);
+      buckets.push({ key: fmtLocal(m), label: fmtLocal(m).slice(5) });
+    }
+  } else {
+    for (let i = periods - 1; i >= 0; i--) {
+      const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`;
+      const monthNames = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
+      buckets.push({ key, label: monthNames[m.getMonth()] + (m.getMonth() === 0 ? " " + String(m.getFullYear()).slice(2) : "") });
+    }
   }
-  const weekData = weeks.map(wk => {
-    const wkSessions = sessions.filter(s => mondayOf(s.date) === wk);
-    const sum = (filterFn) => wkSessions.filter(filterFn).reduce((acc, s) => {
+
+  const keyOf = (s) => grouping === "week" ? mondayOf(s.date) : monthKey(s.date);
+  const data = buckets.map(b => {
+    const bs = sessions.filter(s => keyOf(s) === b.key);
+    const sum = (fn) => bs.filter(fn).reduce((acc, s) => {
       const val = metric === "km" ? (parseFloat(s.km) || 0) : (parseFloat(s.totalTime) || 0) / 60;
       return acc + val;
     }, 0);
     return {
-      week: wk,
+      key: b.key, label: b.label,
       run: sum(s => isRun(s.type)),
       bike: sum(s => s.type === "bike"),
       swim: sum(s => s.type === "alt"),
@@ -6464,74 +6732,72 @@ function StatsTab({ sessions }) {
     };
   });
 
-  const maxVal = Math.max(...weekData.map(w => w.total), 1);
+  const maxVal = Math.max(...data.map(d => d.total), 1);
   const unit = metric === "km" ? "km" : "t";
-
-  // Totals across the whole period
-  const totalRun = weekData.reduce((a, w) => a + w.run, 0);
-  const totalBike = weekData.reduce((a, w) => a + w.bike, 0);
-  const totalSwim = weekData.reduce((a, w) => a + w.swim, 0);
-  const totalAll = weekData.reduce((a, w) => a + w.total, 0);
-  const avgPerWeek = totalAll / weeksBack;
+  const perLabel = grouping === "week" ? "uke" : "måned";
+  const totalRun = data.reduce((a, w) => a + w.run, 0);
+  const totalBike = data.reduce((a, w) => a + w.bike, 0);
+  const totalSwim = data.reduce((a, w) => a + w.swim, 0);
+  const totalAll = data.reduce((a, w) => a + w.total, 0);
+  // Average over ACTIVE periods (those with any activity), so empty future/old buckets don't skew it
+  const activePeriods = data.filter(d => d.total > 0).length || 1;
+  const avgPer = totalAll / activePeriods;
+  const avgRun = totalRun / activePeriods;
+  const avgBike = totalBike / activePeriods;
 
   const SPORT_COLORS = { run: C.accent, bike: C.orange, swim: C.lightblue };
-
-  function fmtVal(v) { return metric === "km" ? v.toFixed(1) : v.toFixed(1); }
+  function fmtVal(v) { return v.toFixed(1); }
 
   return /*#__PURE__*/React.createElement("div", null,
-    /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "📈 Statistikk"),
+    /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83D\uDCC8 Statistikk"),
 
     // Metric toggle
-    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 12, background: C.bg, borderRadius: 10, padding: 4 } },
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, background: C.bg, borderRadius: 10, padding: 4 } },
       ["km", "time"].map(m => /*#__PURE__*/React.createElement("button", {
-        key: m,
-        onClick: () => setMetric(m),
-        style: {
-          flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer",
-          background: metric === m ? C.surface : "transparent",
-          color: metric === m ? C.accent : C.muted,
-          boxShadow: metric === m ? C.shadow : "none"
-        }
-      }, m === "km" ? "📏 Kilometer" : "⏱ Timer"))
+        key: m, onClick: () => setMetric(m),
+        style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: metric === m ? C.surface : "transparent", color: metric === m ? C.accent : C.muted, boxShadow: metric === m ? C.shadow : "none" }
+      }, m === "km" ? "\uD83D\uDCCF Kilometer" : "\u23F1 Timer"))
     ),
 
-    // Period toggle
+    // Grouping toggle (week / month)
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, background: C.bg, borderRadius: 10, padding: 4 } },
+      [["week","Uke for uke"],["month","Måned for måned"]].map(([g,l]) => /*#__PURE__*/React.createElement("button", {
+        key: g, onClick: () => { setGrouping(g); setPeriods(g === "month" ? 12 : 12); },
+        style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: grouping === g ? C.surface : "transparent", color: grouping === g ? C.accent : C.muted, boxShadow: grouping === g ? C.shadow : "none" }
+      }, l))
+    ),
+
+    // Period count toggle
     /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 16 } },
-      [8, 12, 26, 52].map(w => /*#__PURE__*/React.createElement("div", {
-        key: w,
-        onClick: () => setWeeksBack(w),
-        style: {
-          flex: 1, textAlign: "center", padding: "6px 0", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: weeksBack === w ? 700 : 400,
-          background: weeksBack === w ? C.accent + "18" : C.surface,
-          border: "1.5px solid " + (weeksBack === w ? C.accent : C.border),
-          color: weeksBack === w ? C.accent : C.muted
-        }
-      }, w + " uker"))
+      (grouping === "week" ? [8, 12, 26, 52] : [6, 12, 24]).map(w => /*#__PURE__*/React.createElement("div", {
+        key: w, onClick: () => setPeriods(w),
+        style: { flex: 1, textAlign: "center", padding: "6px 0", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: periods === w ? 700 : 400, background: periods === w ? C.accent + "18" : C.surface, border: "1.5px solid " + (periods === w ? C.accent : C.border), color: periods === w ? C.accent : C.muted }
+      }, w + (grouping === "week" ? " uker" : " mnd")))
     ),
 
-    // Summary stats
+    // Summary + averages
     /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
-      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12, marginBottom: 12 } },
         /*#__PURE__*/React.createElement(Stat, { label: "Totalt " + unit, value: fmtVal(totalAll), unit: unit, color: C.text }),
-        /*#__PURE__*/React.createElement(Stat, { label: "Snitt/uke", value: fmtVal(avgPerWeek), unit: unit, color: C.accent }),
-        /*#__PURE__*/React.createElement(Stat, { label: "🏃 Løp", value: fmtVal(totalRun), unit: unit, color: C.accent }),
-        /*#__PURE__*/React.createElement(Stat, { label: "🚴 Sykkel", value: fmtVal(totalBike), unit: unit, color: C.orange })
+        /*#__PURE__*/React.createElement(Stat, { label: "Snitt/" + perLabel, value: fmtVal(avgPer), unit: unit, color: C.accent })
+      ),
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12, paddingTop: 12, borderTop: "1px solid " + C.border } },
+        /*#__PURE__*/React.createElement(Stat, { label: "🏃 Snitt løp/" + perLabel, value: fmtVal(avgRun), unit: unit, color: C.accent }),
+        /*#__PURE__*/React.createElement(Stat, { label: "🚴 Snitt sykkel/" + perLabel, value: fmtVal(avgBike), unit: unit, color: C.orange })
       )
     ),
 
-    // Stacked bar chart
+    // Chart
     /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 12 } }, "PER UKE (" + unit + ")"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 12 } }, "PER " + perLabel.toUpperCase() + " (" + unit + ")"),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "flex-end", gap: 3, height: 160, marginBottom: 8 } },
-        weekData.map((w, i) => {
+        data.map((w, i) => {
           const totalH = (w.total / maxVal) * 100;
           const runH = w.total > 0 ? (w.run / w.total) * totalH : 0;
           const bikeH = w.total > 0 ? (w.bike / w.total) * totalH : 0;
           const swimH = w.total > 0 ? (w.swim / w.total) * totalH : 0;
-          const label = w.week.slice(5); // MM-DD
           return /*#__PURE__*/React.createElement("div", {
-            key: i,
-            title: label + ": " + fmtVal(w.total) + unit,
+            key: i, title: w.label + ": " + fmtVal(w.total) + unit,
             style: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", height: "100%", cursor: "default" }
           },
             /*#__PURE__*/React.createElement("div", { style: { width: "100%", display: "flex", flexDirection: "column-reverse", height: totalH + "%", minHeight: w.total > 0 ? 2 : 0, borderRadius: "3px 3px 0 0", overflow: "hidden" } },
@@ -6543,34 +6809,31 @@ function StatsTab({ sessions }) {
         })
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted } },
-        weekData.map((w, i) => /*#__PURE__*/React.createElement("div", {
-          key: i,
-          style: { flex: 1, textAlign: "center", overflow: "hidden", whiteSpace: "nowrap" }
-        }, (i % Math.ceil(weeksBack / 8) === 0) ? w.week.slice(5) : ""))
+        data.map((w, i) => /*#__PURE__*/React.createElement("div", {
+          key: i, style: { flex: 1, textAlign: "center", overflow: "hidden", whiteSpace: "nowrap" }
+        }, (i % Math.ceil(periods / 8) === 0) ? w.label : ""))
       ),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 12, flexWrap: "wrap" } },
         [{ c: SPORT_COLORS.run, l: "🏃 Løp" }, { c: SPORT_COLORS.bike, l: "🚴 Sykkel" }, { c: SPORT_COLORS.swim, l: "🏊 Svøm" }].map(x => /*#__PURE__*/React.createElement("div", {
           key: x.l, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.muted }
-        },
-          /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: x.c } }), x.l))
+        }, /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 10, borderRadius: 2, background: x.c } }), x.l))
       )
     ),
 
-    // Weekly table breakdown
+    // Table
     /*#__PURE__*/React.createElement(Card, null,
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "UKESOVERSIKT"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, (grouping === "week" ? "UKESOVERSIKT" : "MÅNEDSOVERSIKT")),
       /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 700, color: C.muted, paddingBottom: 6, borderBottom: "1px solid " + C.border } },
-        /*#__PURE__*/React.createElement("div", null, "Uke fra"),
+        /*#__PURE__*/React.createElement("div", null, grouping === "week" ? "Uke fra" : "Måned"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.accent } }, "🏃"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.orange } }, "🚴"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.lightblue } }, "🏊"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } }, "Sum")
       ),
-      [...weekData].reverse().filter(w => w.total > 0).map((w, i) => /*#__PURE__*/React.createElement("div", {
-        key: i,
-        style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: "1px solid " + C.border }
+      [...data].reverse().filter(w => w.total > 0).map((w, i) => /*#__PURE__*/React.createElement("div", {
+        key: i, style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: "1px solid " + C.border }
       },
-        /*#__PURE__*/React.createElement("div", { style: { color: C.text, fontWeight: 600 } }, w.week.slice(5)),
+        /*#__PURE__*/React.createElement("div", { style: { color: C.text, fontWeight: 600 } }, w.label),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.run > 0 ? fmtVal(w.run) : "–"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.bike > 0 ? fmtVal(w.bike) : "–"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.swim > 0 ? fmtVal(w.swim) : "–"),
@@ -6589,7 +6852,7 @@ function App() {
   const [loginPw, setLoginPw] = React.useState("");
   const [loginErr, setLoginErr] = React.useState("");
   function doLogin() {
-    if (loginPw === "FrankfurtMaraton251026") {
+    if (loginPw === "sr") {
       setAuthRole("admin");
       try { sessionStorage.setItem("nm_auth_role", "admin"); } catch {}
       setLoginErr(""); setLoginPw("");
@@ -6779,10 +7042,6 @@ function App() {
     id: "goals",
     icon: "🎯",
     label: "Mål"
-  }, {
-    id: "profile",
-    icon: "👤",
-    label: "Profil"
   }];
   function renderTab() {
     try {
@@ -6793,6 +7052,7 @@ function App() {
             setSessions: setSessions,
             morningData: morningData,
             setMorningData: setMorningData,
+            wellness: wellness,
             goals: goals,
             plannedSessions: plannedSessions,
             profile: profile,
@@ -6982,12 +7242,18 @@ function App() {
     },
     title: "Synkroniser"
   }, "\u2601\uFE0F"), profile?.name && /*#__PURE__*/React.createElement("span", {
+    onClick: () => setTab("profile"),
     style: {
       fontSize: 13,
-      color: C.muted,
-      fontWeight: 600
-    }
-  }, profile.name)))), /*#__PURE__*/React.createElement("div", {
+      color: tab === "profile" ? C.accent : C.text,
+      fontWeight: 700,
+      cursor: "pointer",
+      display: "flex",
+      alignItems: "center",
+      gap: 4
+    },
+    title: "Åpne profil"
+  }, "\uD83D\uDC64 ", profile.name)))), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px 14px 100px",
       maxWidth: 520,
