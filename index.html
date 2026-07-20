@@ -7294,6 +7294,33 @@ function App() {
     }).catch(() => setSyncStatus("⚠️ Sync feilet"));
   }, []);
 
+  // Auto-pull fresh cloud data whenever the app regains focus or becomes
+  // visible again (e.g. you switch back to the phone after editing on PC).
+  // This is what makes cross-device edits show up without a full reload.
+  React.useEffect(() => {
+    let lastPull = 0;
+    function pull() {
+      if (!userId || !sbUrl() || !sbKey()) return;
+      // throttle: don't refetch more than once every 8s
+      if (Date.now() - lastPull < 8000) return;
+      lastPull = Date.now();
+      loadFromSupabase(userId).then(data => {
+        if (data) {
+          applyData(data);
+          setSyncStatus(`✓ ${new Date().toLocaleTimeString("no")}`);
+          setTimeout(() => setSyncStatus(""), 3000);
+        }
+      }).catch(() => {});
+    }
+    function onVisible() { if (document.visibilityState === "visible") pull(); }
+    window.addEventListener("focus", pull);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("focus", pull);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [userId]);
+
   // Safety net: whenever Strava is off, make sure no Strava-tagged sessions
   // remain in local state, no matter how they got there (stale cloud merge,
   // an old sync running again, etc.).
