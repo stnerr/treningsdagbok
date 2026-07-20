@@ -95,9 +95,12 @@ async function loadFromSupabase(uid) {
 }
 async function saveToSupabase(uid, key, value) {
   if (!sbUrl() || !sbKey() || !uid) return;
-  await sbFetch(`training_data`, {
+  // on_conflict names the unique columns so PostgREST performs an UPSERT
+  // (update the existing row) instead of failing on duplicate key. Without
+  // this, the very first insert works but every later edit silently fails.
+  await sbFetch(`training_data?on_conflict=user_id,key`, {
     method: "POST",
-    prefer: "resolution=merge-duplicates",
+    prefer: "resolution=merge-duplicates,return=minimal",
     body: JSON.stringify({
       user_id: uid,
       key,
@@ -152,6 +155,32 @@ function parsePace(s) {
   const p = s.split(":");
   if (p.length === 2) return parseInt(p[0]) + parseInt(p[1]) / 60;
   return null;
+}
+// Parses a duration string like "6 min", "2 min 30 sek", "45 sek", "1 km"
+// into minutes. Returns null if it looks like a distance ("1 km"/"400 m").
+function parseDurMin(s) {
+  if (!s) return null;
+  if (/km|\bm\b/.test(s) && !/min/.test(s)) return null; // it's a distance, not a duration
+  let min = 0; let matched = false;
+  const mMin = s.match(/(\d+(?:[.,]\d+)?)\s*min/);
+  if (mMin) { min += parseFloat(mMin[1].replace(",", ".")); matched = true; }
+  const mSek = s.match(/(\d+)\s*sek/);
+  if (mSek) { min += parseInt(mSek[1]) / 60; matched = true; }
+  return matched ? min : null;
+}
+// Returns a display distance for an interval rep. Uses the stored dist if
+// present; otherwise computes it from pace (min/km) × duration (min) — handy
+// for treadmill reps where the watch logs time but you type the pace after.
+function intervalDist(iv) {
+  if (iv.dist) return iv.dist;
+  const paceMin = parsePace(iv.pace);
+  const durMin = parseDurMin(iv.dur);
+  if (paceMin && durMin && paceMin > 0) {
+    const km = durMin / paceMin;
+    if (km >= 1) return km.toFixed(2).replace(/\.?0+$/, "") + " km";
+    return Math.round(km * 1000) + " m";
+  }
+  return "";
 }
 function calcPace(km, min) {
   if (!km || !min || parseFloat(km) === 0) return "";
@@ -874,29 +903,29 @@ const PROGRAMS = {
         intensity: "hard"
       }],
       3: [{
-        type: "long",
-        label: "🏔️ Langtur 2,45t",
-        desc: "2 timer 45 min · Effort 1 · Hensikten er å få kilometer i beina",
-        intensity: "medium"
-      }],
-      4: [{
         type: "easy",
         label: "🌿 Lett jogg 40 min",
         desc: "40 min · Effort 1 · Hold rolig siden andre er harde",
         intensity: "easy"
       }],
-      5: [{
+      4: [{
         type: "long",
         label: "🏔️ Progressiv langtur 2t",
         desc: "Effort1:30min→Effort3:20min→Effort1:30min→Effort3:20min→Effort4:10min→Effort1:10min · Nøkkeløkt for muskelbelastning",
         intensity: "hard"
       }],
-      6: [],
-      0: [{
+      5: [{
         type: "easy",
         label: "🌿 Lett jogg 35 min",
         desc: "35 min · Effort 1 · Hold rolig siden andre er harde",
         intensity: "easy"
+      }],
+      6: [],
+      0: [{
+        type: "long",
+        label: "🏔️ Langtur 2,45t",
+        desc: "2 timer 45 min · Effort 1 · Hensikten er å få kilometer i beina",
+        intensity: "medium"
       }]
     },
     // UKE 9
@@ -909,10 +938,10 @@ const PROGRAMS = {
         intensity: "hard"
       }],
       3: [{
-        type: "long",
-        label: "🏔️ Langtur 2,5t",
-        desc: "2,5 timer · Effort 1 · Lett tur, men med litt varighet",
-        intensity: "medium"
+        type: "easy",
+        label: "🌿 Lett jogg 35 min",
+        desc: "35 min · Effort 1 · Legges inn mellom hardøkter",
+        intensity: "easy"
       }],
       4: [{
         type: "race",
@@ -928,10 +957,10 @@ const PROGRAMS = {
       }],
       6: [],
       0: [{
-        type: "easy",
-        label: "🌿 Lett jogg 35 min",
-        desc: "35 min · Effort 1 · Legges inn mellom hardøkter",
-        intensity: "easy"
+        type: "long",
+        label: "🏔️ Langtur 2,5t",
+        desc: "2,5 timer · Effort 1 · Lett tur, men med litt varighet",
+        intensity: "medium"
       }]
     },
     // UKE 10
@@ -944,50 +973,50 @@ const PROGRAMS = {
         intensity: "hard"
       }],
       3: [{
-        type: "long",
-        label: "🏔️ Langtur 3,5t",
-        desc: "3,5 timer · Effort 1 · Hjelper kroppen bli klar for maraton-lengde",
-        intensity: "medium"
-      }],
-      4: [{
         type: "easy",
         label: "🌿 Lett jogg 30 min",
         desc: "30 min · Effort 1 · Hold lett siden andre er harde",
         intensity: "easy"
       }],
-      5: [{
+      4: [{
         type: "long",
         label: "🏔️ Progressiv langtur",
         desc: "40 min lett (Effort1) + 20 min økning (Effort2) + 20 min over maratonfart (Effort3) · Hjelper siste 10 km av maraton",
         intensity: "hard"
       }],
-      6: [],
-      0: [{
+      5: [{
         type: "easy",
         label: "🌿 Lett jogg 25 min",
         desc: "25 min · Effort 1 · Hold lett siden andre er harde",
         intensity: "easy"
+      }],
+      6: [],
+      0: [{
+        type: "long",
+        label: "🏔️ Langtur 3,5t",
+        desc: "3,5 timer · Effort 1 · Hjelper kroppen bli klar for maraton-lengde",
+        intensity: "medium"
       }]
     },
     // UKE 11
     {
       1: [],
       2: [{
-        type: "long",
-        label: "🏔️ Langtur 45min gå + 2,5t løp",
-        desc: "45 min gå + 2,5 timer løping · Effort 1 · Viktig å løpe sakte og gå i starten",
-        intensity: "medium"
-      }],
-      3: [{
-        type: "long",
-        label: "🏔️ Progressiv langtur",
-        desc: "40 min lett (Effort1) + 40 min økning (Effort2) + 40 min over maratonfart (Effort3) · Nøkkeløkt for siste 10 km",
-        intensity: "hard"
-      }],
-      4: [{
         type: "intervals",
         label: "🏃 Progressive intervaller 30×1 min",
         desc: "30×1 min, pause 30 sek · Effort 2→4 · Prøv å løpe raskere og raskere",
+        intensity: "hard"
+      }],
+      3: [{
+        type: "easy",
+        label: "🌿 Lett jogg 30 min",
+        desc: "30 min · Effort 1 · Hold lett siden andre er harde",
+        intensity: "easy"
+      }],
+      4: [{
+        type: "long",
+        label: "🏔️ Progressiv langtur",
+        desc: "40 min lett (Effort1) + 40 min økning (Effort2) + 40 min over maratonfart (Effort3) · Nøkkeløkt for siste 10 km",
         intensity: "hard"
       }],
       5: [{
@@ -998,10 +1027,10 @@ const PROGRAMS = {
       }],
       6: [],
       0: [{
-        type: "easy",
-        label: "🌿 Lett jogg 30 min",
-        desc: "30 min · Effort 1 · Hold lett siden andre er harde",
-        intensity: "easy"
+        type: "long",
+        label: "🏔️ Langtur 45min gå + 2,5t løp",
+        desc: "45 min gå + 2,5 timer løping · Effort 1 · Viktig å løpe sakte og gå i starten",
+        intensity: "medium"
       }]
     },
     // UKE 12
@@ -1050,19 +1079,19 @@ const PROGRAMS = {
         intensity: "hard"
       }],
       4: [{
-        type: "long",
-        label: "🏔️ Langtur 3t",
-        desc: "3 timer · Effort 1 · Løp veldig, veldig lett",
-        intensity: "medium"
-      }],
-      5: [{
         type: "easy",
         label: "🌿 Lett jogg 30 min",
         desc: "30 min · Effort 1 · Hold lett siden andre er harde",
         intensity: "easy"
       }],
+      5: [],
       6: [],
-      0: []
+      0: [{
+        type: "long",
+        label: "🏔️ Langtur 3t",
+        desc: "3 timer · Effort 1 · Løp veldig, veldig lett",
+        intensity: "medium"
+      }]
     },
     // UKE 14 (NEDTRAPPING)
     {
@@ -1074,10 +1103,10 @@ const PROGRAMS = {
       }],
       2: [],
       3: [{
-        type: "long",
-        label: "🏔️ Langtur 2–2,5t",
-        desc: "2–2,5 timer · Effort 1 · Øv på næring og drikke som under løpsdag",
-        intensity: "medium"
+        type: "easy",
+        label: "🌿 Lett jogg 30–40 min",
+        desc: "30–40 min · Effort 1 · Legges mellom hardøkter",
+        intensity: "easy"
       }],
       4: [{
         type: "easy",
@@ -1086,13 +1115,13 @@ const PROGRAMS = {
         intensity: "easy"
       }],
       5: [],
-      6: [{
-        type: "easy",
-        label: "🌿 Lett jogg 30–40 min",
-        desc: "30–40 min · Effort 1 · Legges mellom hardøkter",
-        intensity: "easy"
-      }],
-      0: []
+      6: [],
+      0: [{
+        type: "long",
+        label: "🏔️ Langtur 2–2,5t",
+        desc: "2–2,5 timer · Effort 1 · Øv på næring og drikke som under løpsdag",
+        intensity: "medium"
+      }]
     },
     // UKE 15 (NEDTRAPPING)
     {
@@ -2661,8 +2690,10 @@ function analyzeDashboard({
     last7 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 7);
   const hard = last7.filter(s => s.type === "intervals"),
     km = last7.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
+  const crossN = last7.filter(s => s.type === "bike" || s.type === "alt").length;
   if (hard.length >= 3) warnings.push(`🚨 ${hard.length} harde økter siste 7 dager – over anbefalt max (2).`);
   if (km > 0) tips.push(`📊 ${km.toFixed(0)} km denne uken.`);
+  if (crossN > 0) tips.push(`🚴 ${crossN} alternativ økt (sykkel/svømming) denne uken – god aerob støttetrening.`);
   if (goals.length > 0) {
     const g = goals[0],
       dl = daysUntil(g.date);
@@ -2741,7 +2772,27 @@ function analyzeGoalProgress({
   const types = new Set(last4.map(s => s.type));
   if (types.size < 3) lines.push("⚠️ Lite variasjon i økttyper. Kombiner rolige turer, intervaller og langtur.");
 
-  // 7. Phase advice
+  // 6b. Cross-training (cycling/swimming) as supportive aerobic work
+  const crossLast4 = sessions.filter(s => {
+    const days = (now - new Date(s.date + "T00:00:00")) / 86400000;
+    return days <= 28 && (s.type === "bike" || s.type === "alt");
+  });
+  if (crossLast4.length > 0) {
+    const bikeN = crossLast4.filter(s => s.type === "bike").length;
+    const swimN = crossLast4.filter(s => s.type === "alt" && s.sport === "swim").length;
+    const otherN = crossLast4.length - bikeN - swimN;
+    const parts = [];
+    if (bikeN) parts.push(`${bikeN} sykkel`);
+    if (swimN) parts.push(`${swimN} svømming`);
+    if (otherN) parts.push(`${otherN} annen`);
+    const crossMin = crossLast4.reduce((a, s) => a + (parseFloat(s.totalTime) || 0), 0);
+    lines.push(`🚴 Alternativ trening siste 4 uker: ${parts.join(", ")} (${Math.round(crossMin / 4)} min/uke). Bra for aerob base og restitusjon uten løpsbelastning.`);
+    // Encourage cross-training especially when running volume is low or during high load
+    if (km4 < rec * 0.55) lines.push("💡 Med lavt løpsvolum er sykling/svømming en skånsom måte å bygge aerob kapasitet mot målet.");
+    else if (hardRatio > 0.35 || (longRuns.length && Math.max(...longRuns) > 0)) lines.push("💡 Legg gjerne sykkel/svømming på restitusjonsdager – holder aerob base uten ekstra støtbelastning på beina.");
+  }
+
+
   if (dLeft <= 14) lines.push("⬇️ TAPERING: –40% volum, behold 1 terskeløkt. Sov mye, spis godt.");else if (dLeft <= 21) lines.push("🔧 3 uker igjen: Siste tøffe blokk nå, deretter nedtrapping.");else if (dLeft > 60 && km4 < rec * 0.7) lines.push(`💡 God tid til løpet. Fokus på å bygge volum gradvis mot ${rec}km/uke.`);
   return lines;
 }
@@ -5259,7 +5310,7 @@ function LogTab({
         fontSize: 11,
         color: C.yellow
       }
-    }, /*#__PURE__*/React.createElement("span", { style: { minWidth: 30 } }, "\u23F8"), /*#__PURE__*/React.createElement("span", null, "Pause"), (iv.dist || iv.dur) && /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, [iv.dist, iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", null, iv.pace, "/km"), iv.hr && /*#__PURE__*/React.createElement("span", null, iv.hr, "bpm")) : /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("span", { style: { minWidth: 30 } }, "\u23F8"), /*#__PURE__*/React.createElement("span", null, "Pause"), (intervalDist(iv) || iv.dur) && /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600 } }, [intervalDist(iv), iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", null, iv.pace, "/km"), iv.hr && /*#__PURE__*/React.createElement("span", null, iv.hr, "bpm")) : /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         display: "flex",
@@ -5278,7 +5329,7 @@ function LogTab({
       style: {
         fontWeight: 600
       }
-    }, [iv.dist, iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", {
+    }, [intervalDist(iv), iv.dur].filter(Boolean).join(" · ")), iv.pace && /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.accent
       }
