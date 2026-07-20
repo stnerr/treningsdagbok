@@ -194,7 +194,10 @@ function addDays(s, n) {
 }
 function fmtPace(m) {
   if (!m || isNaN(m)) return null;
-  return `${Math.floor(m)}:${String(Math.round(m % 1 * 60)).padStart(2, "0")}`;
+  let min = Math.floor(m);
+  let sec = Math.round((m - min) * 60);
+  if (sec === 60) { min += 1; sec = 0; }
+  return `${min}:${String(sec).padStart(2, "0")}`;
 }
 function parsePace(s) {
   if (!s) return null;
@@ -2492,6 +2495,93 @@ function parseTargetPace(goal) {
   const m = p.length === 3 ? p[0] * 60 + p[1] + p[2] / 60 : p[0] + p[1] / 60;
   return m / parseFloat(goal.distanceKm);
 }
+
+// Effort/pace zones anchored to MARATHON goal pace, using the ratios from the
+// 3:45-plan Word doc (Marius Bakken calculator). Sone 3 sits between marathon
+// and half-marathon pace; Sone 4-5 are threshold/speed. Given a marathon goal
+// pace (min/km), returns the 5 zones with pace + HR range. Works for any goal —
+// e.g. change the marathon target and every zone scales with it.
+// Reference (3:45 marathon = 5:20/km maratonfart, MHR 194):
+//   Sone 1 6:21 (1.191×)  Sone 2 5:46 (1.081×)  Sone 3 5:11 (0.972×)
+//   Sone 4 4:54 (0.919×)  Sone 5 4:42 (0.881×)
+const ZONE_RATIOS = [
+  { zone: 1, ratio: 1.1908, name: "Veldig lett", hrPct: [0.60, 0.72] },
+  { zone: 2, ratio: 1.0814, name: "Lett", hrPct: [0.72, 0.80] },
+  { zone: 3, ratio: 0.9720, name: "Moderat (maraton–HM)", hrPct: [0.80, 0.87] },
+  { zone: 4, ratio: 0.9189, name: "Hardt (10k–HM)", hrPct: [0.87, 0.92] },
+  { zone: 5, ratio: 0.8814, name: "Veldig hardt", hrPct: [0.92, 0.97] }
+];
+function paceZonesFromMarathon(maratonPaceMinKm, maxHr) {
+  if (!maratonPaceMinKm) return null;
+  return ZONE_RATIOS.map(z => ({
+    zone: z.zone,
+    name: z.name,
+    pace: fmtPace(maratonPaceMinKm * z.ratio),
+    hr: maxHr ? [Math.round(maxHr * z.hrPct[0]), Math.round(maxHr * z.hrPct[1])] : null
+  }));
+}
+// Given the user's goals, derive the marathon-equivalent pace to anchor zones.
+// Prefer an actual marathon goal; otherwise scale from whatever goal exists
+// using race-distance pace relationships (HM ~2.6% faster than M pace, etc.).
+function deriveMarathonPace(goals) {
+  if (!goals || !goals.length) return null;
+  const withPace = goals.map(g => ({ g, pace: parseTargetPace(g), km: parseFloat(g.distanceKm) })).filter(x => x.pace);
+  if (!withPace.length) return null;
+  const mar = withPace.find(x => x.km >= 40);
+  if (mar) return mar.pace;
+  const hm = withPace.find(x => x.km >= 20 && x.km < 40);
+  if (hm) return hm.pace / 0.974; // HM pace ≈ 2.6% faster than marathon pace
+  const tenk = withPace.find(x => x.km >= 9 && x.km < 12);
+  if (tenk) return tenk.pace / 0.945;
+  const fivek = withPace.find(x => x.km >= 4 && x.km < 6);
+  if (fivek) return fivek.pace / 0.92;
+  return withPace[0].pace; // fallback
+}
+
+// Library of alternative key workouts by race distance. Paces are expressed as
+// zone references so they scale to the user's actual goal via paceZonesFromMarathon.
+// z = which zone the main effort sits in. Sourced from the 3:45 Word-doc plan
+// (Bakken) and the Runners World HM/marathon programs the user shared.
+const WORKOUT_LIBRARY = {
+  marathon: {
+    label: "Maraton",
+    workouts: [
+      { type: "intervals", name: "🏃 Intervaller i maratonfart 4×5 min", z: 3, desc: "4 × 5 min i maratonfart, p: 2 min. Ikke løp for hardt – hold jevn maratonrytme.", intensity: "medium" },
+      { type: "intervals", name: "🏃 Maratondrag 3×3 km", z: 3, desc: "3 × 3 km i målsatt maratonfart, p: 3 min jogg. Nøkkeløkt for å kjenne løpsfarten.", intensity: "hard" },
+      { type: "intervals", name: "🏃 Tempo med flyt 7×6 min", z: 3, desc: "7 × 6 min (Sone 3), flytpause 2 min (Sone 2). Bygger terskel og fartsveksling.", intensity: "hard" },
+      { type: "long", name: "🏔️ Progressiv langtur", z: 1, desc: "40 min lett (Sone 1) + 40 min (Sone 2) + 20 min over maratonfart (Sone 3). Trener siste 10 km.", intensity: "hard" },
+      { type: "long", name: "🏔️ Langtur 2,5–3 t", z: 1, desc: "2,5–3 timer rolig (Sone 1). Øv på næring og drikke som på løpsdag.", intensity: "medium" }
+    ]
+  },
+  half: {
+    label: "Halvmaraton",
+    workouts: [
+      { type: "intervals", name: "🏃 Terskel 4×2 km", z: 4, desc: "4 × 2 km i terskelfart (Sone 4), p: 2 min. Hever terskelfarten.", intensity: "hard" },
+      { type: "intervals", name: "🏃 Kenyansk 8×4 min", z: 3, desc: "8 × 4 min vekslende (Sone 3), p: 60 sek. Progressiv, øker mot slutten.", intensity: "hard" },
+      { type: "intervals", name: "🏃 Tempo 20 min + 10×1 min", z: 3, desc: "20 min tempo (Sone 3) + 10 × 1 min (Sone 4), p: 1 min. Mix-økt.", intensity: "hard" },
+      { type: "intervals", name: "🏃 Bakkedrag 6×5 min", z: 4, desc: "6 × 5 min i motbakke (Sone 4), rolig ned. Styrke og løpsøkonomi.", intensity: "hard" },
+      { type: "long", name: "🏔️ Langtur 1,5–2 t med tempo", z: 1, desc: "1,5–2 t rolig med 20 min i halvmaratonfart (Sone 3) mot slutten.", intensity: "medium" }
+    ]
+  },
+  tenk: {
+    label: "10 km",
+    workouts: [
+      { type: "intervals", name: "🏃 5×1000 m", z: 4, desc: "5 × 1000 m i 10k-fart (Sone 4), p: 2 min jogg. Klassisk 10k-økt.", intensity: "hard" },
+      { type: "intervals", name: "🏃 6×800 m", z: 5, desc: "6 × 800 m litt raskere enn 10k (Sone 5), p: 90 sek. Fart og terskel.", intensity: "hard" },
+      { type: "intervals", name: "🏃 Kenyansk 10×3 min", z: 4, desc: "10 × 3 min (Sone 4), p: 60 sek. Bygger 10k-spesifikk utholdenhet.", intensity: "hard" },
+      { type: "intervals", name: "🏃 3×2 km terskel", z: 4, desc: "3 × 2 km i terskelfart (Sone 4), p: 2 min. Hever terskelen.", intensity: "hard" }
+    ]
+  },
+  fivek: {
+    label: "5 km",
+    workouts: [
+      { type: "intervals", name: "🏃 8×400 m", z: 5, desc: "8 × 400 m raskere enn 5k-fart (Sone 5), p: 90 sek. Fart og spenst.", intensity: "hard" },
+      { type: "intervals", name: "🏃 5×1000 m i 5k-fart", z: 5, desc: "5 × 1000 m i 5k-fart (Sone 5), p: 2–3 min. Nøkkeløkt for 5k.", intensity: "hard" },
+      { type: "intervals", name: "🏃 12×200 m", z: 5, desc: "12 × 200 m korte harde drag (Sone 5), p: 200 m jogg. Toppfart.", intensity: "hard" },
+      { type: "intervals", name: "🏃 30/30 × 20", z: 5, desc: "20 × 30 sek hardt (Sone 5) / 30 sek rolig. Utvikler maksimal oksygenopptak.", intensity: "hard" }
+    ]
+  }
+};
 function weekLoadFactor(weeksOut) {
   // 4-week wave: build, build, peak, recover
   const pos = weeksOut % 4;
@@ -3737,6 +3827,7 @@ function CalendarTab({
     intensity: "easy"
   });
   const [editingIdx, setEditingIdx] = React.useState(null);
+  const [suggestCat, setSuggestCat] = React.useState("");
   const today = todayStr();
   function dStr(y, m, d) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -3971,7 +4062,29 @@ function CalendarTab({
         padding: 12,
         marginBottom: 12
       }
-    }, /*#__PURE__*/React.createElement(Sel, {
+    }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 6 } }, "FORSLAG TIL ØKT"),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: suggestCat ? 8 : 12, flexWrap: "wrap" } },
+      [["fivek", "5 km"], ["tenk", "10 km"], ["half", "Halvmaraton"], ["marathon", "Maraton"]].map(([cat, lbl]) => /*#__PURE__*/React.createElement("button", {
+        key: cat, onClick: () => setSuggestCat(suggestCat === cat ? "" : cat),
+        style: { flex: "1 1 auto", border: `1.5px solid ${suggestCat === cat ? C.accent : C.border}`, background: suggestCat === cat ? C.accent + "18" : C.surface, borderRadius: 8, padding: "6px 8px", fontSize: 12, fontWeight: 700, cursor: "pointer", color: suggestCat === cat ? C.accent : C.muted }
+      }, lbl))),
+    suggestCat && (() => {
+      const marPace = deriveMarathonPace(goals);
+      const zones = paceZonesFromMarathon(marPace, parseFloat(profile?.maxHr) || null);
+      const lib = WORKOUT_LIBRARY[suggestCat];
+      return /*#__PURE__*/React.createElement("div", { style: { marginBottom: 12 } },
+        lib.workouts.map((w, i) => {
+          const z = zones ? zones.find(x => x.zone === w.z) : null;
+          const paceStr = z ? ` · ${z.pace}/km${z.hr ? " · HR " + z.hr[0] + "–" + z.hr[1] : ""}` : "";
+          return /*#__PURE__*/React.createElement("div", {
+            key: i,
+            onClick: () => { setNewSess({ type: w.type, label: w.name, desc: w.desc + paceStr, intensity: w.intensity }); setSuggestCat(""); },
+            style: { background: C.surface, borderRadius: 8, padding: "8px 10px", marginBottom: 5, cursor: "pointer", border: `1px solid ${C.border}` }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text } }, w.name),
+            /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 2 } }, w.desc, z ? /*#__PURE__*/React.createElement("span", { style: { color: C.accent, fontWeight: 600 } }, paceStr) : ""));
+        }));
+    })(), /*#__PURE__*/React.createElement(Sel, {
       label: "Type",
       value: newSess.type,
       onChange: v => setNewSess(p => ({
@@ -6040,7 +6153,25 @@ function GoalsTab({
       fontWeight: 800,
       marginBottom: 16
     }
-  }, "\uD83C\uDFAF Treningsm\xE5l"), /*#__PURE__*/React.createElement(Card, {
+  }, "\uD83C\uDFAF Treningsm\xE5l"), (() => {
+    const marPace = deriveMarathonPace(goals);
+    const maxHr = parseFloat(profile?.maxHr) || null;
+    const zones = paceZonesFromMarathon(marPace, maxHr);
+    if (!zones) return null;
+    return /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 4 } }, "DINE FARTSSONER"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 10 } }, "Beregnet fra maratonfart ", /*#__PURE__*/React.createElement("b", { style: { color: C.text } }, fmtPace(marPace), "/km"), ". Sone 3 ligger mellom maraton- og halvmaratonfart; Sone 4–5 er terskel/fart."),
+      zones.map(z => {
+        const col = [C.lightblue, C.green, C.accent, C.orange, C.red][z.zone - 1];
+        return /*#__PURE__*/React.createElement("div", { key: z.zone, style: { display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: `1px solid ${C.border}` } },
+          /*#__PURE__*/React.createElement("div", { style: { width: 46, fontSize: 12, fontWeight: 800, color: col } }, "Sone ", z.zone),
+          /*#__PURE__*/React.createElement("div", { style: { flex: 1, fontSize: 11, color: C.muted } }, z.name),
+          /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, minWidth: 62, textAlign: "right" } }, z.pace, "/km"),
+          z.hr && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, minWidth: 58, textAlign: "right" } }, z.hr[0], "–", z.hr[1]));
+      }),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.5 } },
+        "💡 Legg rolige økter i Sone 1 – ikke løp for hardt mellom hardøktene. Styr harde intervaller etter puls når det er varmt eller pollen gir høyere puls enn normalt. Variasjon i fart er viktig for løpssuksess."));
+  })(), /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 16,
       borderLeft: `4px solid ${C.accent}`
