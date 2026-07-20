@@ -3580,7 +3580,8 @@ function CalendarTab({
   profile,
   prefs,
   userId,
-  isAdmin
+  isAdmin,
+  onOpenSession
 }) {
   const setPlannedSessions = isAdmin ? _setPlannedSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const [viewMode, setViewMode] = React.useState("calendar");
@@ -3595,6 +3596,8 @@ function CalendarTab({
   const [infoDate, setInfoDate] = React.useState(todayStr());
   const [editSessions, setEditSessions] = React.useState([]);
   const [showAdd, setShowAdd] = React.useState(false);
+  const [movingSession, setMovingSession] = React.useState(null); // {index, session}
+  const [moveToDate, setMoveToDate] = React.useState("");
   const [newSess, setNewSess] = React.useState({
     type: "easy",
     label: "",
@@ -3722,6 +3725,7 @@ function CalendarTab({
       }
     }, "GJENNOMF\xD8RT"), done.map((s, i) => /*#__PURE__*/React.createElement("div", {
       key: i,
+      onClick: () => { if (onOpenSession) { setSelDate(null); onOpenSession(s.id); } },
       style: {
         background: "#f0fdf4",
         borderRadius: 8,
@@ -3729,9 +3733,13 @@ function CalendarTab({
         marginBottom: 4,
         fontSize: 13,
         color: C.green,
-        fontWeight: 600
+        fontWeight: 600,
+        cursor: "pointer",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
       }
-    }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null))), /*#__PURE__*/React.createElement("div", {
+    }, "\u2713 ", typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null, /*#__PURE__*/React.createElement("span", { style: { color: C.muted, fontSize: 14, float: "right" } }, "\u203A")))), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: C.muted,
@@ -3777,17 +3785,8 @@ function CalendarTab({
       }
     }, /*#__PURE__*/React.createElement(Btn, {
       onClick: () => {
-        const toDate = prompt("Flytt økt til (ÅÅÅÅ-MM-DD):");
-        if (!toDate || !toDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return;
-        }
-        const moved = s;
-        setEditSessions(p => p.filter((_, idx) => idx !== i));
-        setPlannedSessions(p => ({
-          ...p,
-          [toDate]: [...getPlans(toDate), moved],
-          [selDate]: editSessions.filter((_, idx) => idx !== i)
-        }), userId);
+        setMovingSession({ index: i, session: s, fromDate: selDate });
+        setMoveToDate(selDate);
       },
       small: true,
       color: C.yellow,
@@ -4162,7 +4161,46 @@ function CalendarTab({
       borderRadius: "50%",
       background: color
     }
-  }), label))), /*#__PURE__*/React.createElement(InfoPanel, null), selDate && /*#__PURE__*/React.createElement(EditModal, null));
+  }), label))), /*#__PURE__*/React.createElement(InfoPanel, null), selDate && /*#__PURE__*/React.createElement(EditModal, null), movingSession && /*#__PURE__*/React.createElement(MoveModal, null));
+
+  function MoveModal() {
+    return /*#__PURE__*/React.createElement("div", {
+      style: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: { background: C.surface, borderRadius: 16, padding: 20, width: "100%", maxWidth: 340 }
+    },
+      /*#__PURE__*/React.createElement("div", { style: { fontWeight: 800, fontSize: 16, marginBottom: 4 } }, "Flytt økt"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 14 } }, movingSession.session.label || typeLabel(movingSession.session.type)),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 } }, "Velg ny dato"),
+      /*#__PURE__*/React.createElement("input", {
+        type: "date",
+        value: moveToDate,
+        onChange: e => setMoveToDate(e.target.value),
+        style: { width: "100%", boxSizing: "border-box", background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 15, color: C.text, outline: "none", marginBottom: 16 }
+      }),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8 } },
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => { setMovingSession(null); setMoveToDate(""); },
+          style: { flex: 1, border: `1.5px solid ${C.border}`, background: C.surface, borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 700, cursor: "pointer", color: C.muted }
+        }, "Avbryt"),
+        /*#__PURE__*/React.createElement("button", {
+          onClick: () => {
+            const { index, session, fromDate } = movingSession;
+            if (!moveToDate || moveToDate === fromDate) { setMovingSession(null); return; }
+            setEditSessions(p => p.filter((_, idx) => idx !== index));
+            setPlannedSessions(p => ({
+              ...p,
+              [moveToDate]: [...getPlans(moveToDate), session],
+              [fromDate]: editSessions.filter((_, idx) => idx !== index)
+            }), userId);
+            setMovingSession(null);
+            setMoveToDate("");
+          },
+          style: { flex: 1, border: "none", background: C.accent, color: "#fff", borderRadius: 10, padding: "11px 0", fontSize: 14, fontWeight: 700, cursor: "pointer" }
+        }, "Flytt")
+      )
+    ));
+  }
 
   function InfoPanel() {
     const d = infoDate || today;
@@ -4214,8 +4252,9 @@ function CalendarTab({
       }, "✓ GJENNOMFØRT"),
       done.map((s, i) => /*#__PURE__*/React.createElement("div", {
         key: "d" + i,
-        style: { background: "#f0fdf4", borderRadius: 8, padding: "6px 10px", marginBottom: 4, fontSize: 13, color: C.green, fontWeight: 600 }
-      }, "✓ ", s.title ? s.title : typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null))
+        onClick: () => { if (onOpenSession) onOpenSession(s.id); },
+        style: { background: "#f0fdf4", borderRadius: 8, padding: "6px 10px", marginBottom: 4, fontSize: 13, color: C.green, fontWeight: 600, cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }
+      }, /*#__PURE__*/React.createElement("span", null, "✓ ", s.title ? s.title : typeLabel(s.type), s.km ? " · " + s.km + "km" : "", s.avgPace ? " · " + s.avgPace + "/km" : "", s.stravaId ? /*#__PURE__*/React.createElement("span", { style: { display: "inline-block", background: "#FC4C02", color: "#fff", fontSize: 8, fontWeight: 700, padding: "0px 5px", borderRadius: 3, marginLeft: 5, verticalAlign: "middle" } }, "STRAVA") : null), /*#__PURE__*/React.createElement("span", { style: { color: C.muted, fontSize: 14 } }, "›")))
     ));
   }
 }
@@ -4351,7 +4390,8 @@ function IntervalBuilder({
       flex: 1,
       display: "flex",
       alignItems: "center",
-      gap: 6
+      gap: 6,
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -4360,18 +4400,25 @@ function IntervalBuilder({
       fontWeight: 600
     }
   }, "\u23F8 Pause:"), /*#__PURE__*/React.createElement("input", {
-    value: iv.dur,
+    value: iv.dur || "",
     onChange: e => upd(i, "dur", e.target.value),
-    style: {
-      background: "transparent",
-      border: "none",
-      fontSize: 12,
-      color: C.yellow,
-      fontWeight: 600,
-      outline: "none",
-      width: 80
-    },
+    style: { background: "#fffbe8", border: "1px solid " + C.yellow + "44", borderRadius: 4, fontSize: 12, color: C.yellow, fontWeight: 600, outline: "none", width: 62, padding: "3px 5px" },
     placeholder: "2 min"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: iv.dist || "",
+    onChange: e => upd(i, "dist", e.target.value),
+    style: { background: "#fffbe8", border: "1px solid " + C.yellow + "44", borderRadius: 4, fontSize: 12, color: C.yellow, fontWeight: 600, outline: "none", width: 56, padding: "3px 5px" },
+    placeholder: "400 m"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: iv.pace || "",
+    onChange: e => upd(i, "pace", e.target.value),
+    style: { background: "#fffbe8", border: "1px solid " + C.yellow + "44", borderRadius: 4, fontSize: 12, color: C.yellow, fontWeight: 600, outline: "none", width: 54, padding: "3px 5px" },
+    placeholder: "6:00"
+  }), /*#__PURE__*/React.createElement("input", {
+    value: iv.hr || "",
+    onChange: e => upd(i, "hr", e.target.value),
+    style: { background: "#fffbe8", border: "1px solid " + C.yellow + "44", borderRadius: 4, fontSize: 12, color: C.yellow, fontWeight: 600, outline: "none", width: 46, padding: "3px 5px" },
+    placeholder: "bpm"
   })) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(Inp, {
     label: i === 0 ? "Varighet" : "",
     value: iv.dur,
@@ -4558,7 +4605,9 @@ function LogTab({
   goals,
   profile,
   userId,
-  isAdmin
+  isAdmin,
+  targetId,
+  clearTarget
 }) {
   const setSessions = isAdmin ? _setSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const today = todayStr();
@@ -4587,6 +4636,12 @@ function LogTab({
   const [saved, setSaved] = React.useState(false);
   const [editId, setEditId] = React.useState(null);
   const [expandedId, setExpandedId] = React.useState(null);
+  React.useEffect(() => {
+    if (targetId) {
+      setExpandedId(targetId);
+      if (clearTarget) clearTarget();
+    }
+  }, [targetId]);
   const [search, setSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const isBike = form.type === "bike";
@@ -6779,7 +6834,7 @@ function FormTab({ wellness, sessions, goals }) {
   );
 }
 
-function StatsTab({ sessions }) {
+function StatsTab({ sessions, wellness, goals }) {
   const [metric, setMetric] = React.useState("km"); // "km" or "time"
   const [grouping, setGrouping] = React.useState("week"); // "week" or "month"
   const [periods, setPeriods] = React.useState(12);
@@ -6848,6 +6903,61 @@ function StatsTab({ sessions }) {
 
   const SPORT_COLORS = { run: C.accent, bike: C.orange, swim: C.lightblue };
   function fmtVal(v) { return v.toFixed(1); }
+
+  // ── Fitness trend: average pace & HR per run type over recent months ──
+  function paceToSec(p) {
+    if (!p) return null;
+    const m = String(p).match(/(\d+):(\d+)/);
+    return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null;
+  }
+  function secToPace(s) {
+    if (s == null) return "";
+    const m = Math.floor(s / 60), sec = Math.round(s % 60);
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  }
+  const fitMonths = [];
+  {
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      fitMonths.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`);
+    }
+  }
+  const fitTypes = [
+    { key: "easy", label: "Rolige turer", color: C.accent },
+    { key: "long", label: "Langturer", color: C.lightblue },
+    { key: "intervals", label: "Intervalldrag", color: C.red }
+  ];
+  // For each type, average pace (sec/km) per month. For intervals, average the
+  // non-pause drag paces within each session, then across sessions.
+  const fitData = fitTypes.map(t => {
+    const monthly = fitMonths.map(mk => {
+      const ms = sessions.filter(s => s.type === t.key && s.date.slice(0, 7) === mk);
+      let paceVals = [];
+      let hrVals = [];
+      ms.forEach(s => {
+        if (t.key === "intervals" && s.intervals && s.intervals.length) {
+          const drags = s.intervals.filter(iv => !iv.isPause);
+          const dp = drags.map(iv => paceToSec(iv.pace)).filter(v => v != null);
+          const dh = drags.map(iv => parseFloat(iv.hr)).filter(v => !isNaN(v));
+          if (dp.length) paceVals.push(dp.reduce((a, b) => a + b, 0) / dp.length);
+          if (dh.length) hrVals.push(dh.reduce((a, b) => a + b, 0) / dh.length);
+        } else {
+          const p = paceToSec(s.avgPace);
+          if (p != null) paceVals.push(p);
+          const h = parseFloat(s.avgHr);
+          if (!isNaN(h)) hrVals.push(h);
+        }
+      });
+      return {
+        pace: paceVals.length ? paceVals.reduce((a, b) => a + b, 0) / paceVals.length : null,
+        hr: hrVals.length ? Math.round(hrVals.reduce((a, b) => a + b, 0) / hrVals.length) : null,
+        count: ms.length
+      };
+    });
+    return { ...t, monthly };
+  });
+  const hasFitData = fitData.some(t => t.monthly.some(m => m.pace != null));
 
   return /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83D\uDCC8 Statistikk"),
@@ -6941,12 +7051,86 @@ function StatsTab({ sessions }) {
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", fontWeight: 700, color: C.text } }, fmtVal(w.total))
       )),
       totalAll === 0 && /*#__PURE__*/React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 20, fontSize: 13 } }, "Ingen økter registrert ennå")
-    )
+    ),
+
+    // ── Fitness trend (form indicator): avg pace per run type over months ──
+    hasFitData && /*#__PURE__*/React.createElement(Card, { style: { marginTop: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 4 } }, "FORMINDIKATOR – SNITTFART PER ØKTTYPE"),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 12 } }, "Lavere = raskere. Faller kurven over tid, er formen på vei opp."),
+      fitData.filter(t => t.monthly.some(m => m.pace != null)).map(t => {
+        const vals = t.monthly.map(m => m.pace);
+        const present = vals.filter(v => v != null);
+        const min = Math.min(...present), max = Math.max(...present);
+        const range = (max - min) || 1;
+        const W = 300, H = 54, pad = 4;
+        const pts = t.monthly.map((m, i) => m.pace == null ? null : {
+          x: pad + (i / (t.monthly.length - 1)) * (W - pad * 2),
+          y: pad + (m.pace - min) / range * (H - pad * 2),
+          v: m.pace
+        }).filter(Boolean);
+        const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+        const first = t.monthly.find(m => m.pace != null);
+        const last = [...t.monthly].reverse().find(m => m.pace != null);
+        const improving = first && last && first !== last ? last.pace < first.pace : null;
+        return /*#__PURE__*/React.createElement("div", { key: t.key, style: { marginBottom: 14 } },
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+            /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: t.color } }, t.label),
+            improving != null && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: improving ? C.green : C.muted } }, improving ? "↗ raskere" : "→ stabil")
+          ),
+          /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 6 } },
+            /*#__PURE__*/React.createElement("path", { d: path, fill: "none", stroke: t.color, strokeWidth: 2 }),
+            ...pts.map((p, i) => /*#__PURE__*/React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: 2.5, fill: t.color }))
+          ),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 2 } },
+            first && /*#__PURE__*/React.createElement("span", null, secToPace(first.pace), "/km"),
+            last && /*#__PURE__*/React.createElement("span", null, secToPace(last.pace), "/km")
+          )
+        );
+      }),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 4, borderTop: `1px solid ${C.border}`, paddingTop: 6 } },
+        fitMonths.map((mk, i) => {
+          const monthNames = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
+          return /*#__PURE__*/React.createElement("span", { key: i, style: { flex: 1, textAlign: "center" } }, monthNames[parseInt(mk.slice(5)) - 1]);
+        })
+      )
+    ),
+
+    // ── Form curve (CTL/ATL/TSB) moved in from the Form tab ──
+    wellness && wellness.length > 0 && (() => {
+      const rows = [...wellness].filter(w => w.ctl != null || w.atl != null).sort((a, b) => a.date.localeCompare(b.date)).slice(-90);
+      if (rows.length < 2) return null;
+      const ctls = rows.map(r => r.ctl || 0), atls = rows.map(r => r.atl || 0), tsbs = rows.map(r => r.tsb || 0);
+      const allVals = [...ctls, ...atls];
+      const maxV = Math.max(...allVals, 1), minV = Math.min(...tsbs, 0);
+      const W = 300, H = 100, pad = 4;
+      const xFor = i => pad + (i / (rows.length - 1)) * (W - pad * 2);
+      const yFor = v => pad + (1 - (v - minV) / ((maxV - minV) || 1)) * (H - pad * 2);
+      const pathOf = arr => arr.map((v, i) => `${i === 0 ? "M" : "L"}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(" ");
+      const latest = rows[rows.length - 1];
+      return /*#__PURE__*/React.createElement(Card, { style: { marginTop: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "FORMKURVE (SISTE 90 DAGER)"),
+        /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 12 } },
+          /*#__PURE__*/React.createElement(Stat, { label: "Fitness (CTL)", value: Math.round(latest.ctl || 0), unit: "", color: C.accent }),
+          /*#__PURE__*/React.createElement(Stat, { label: "Tretthet (ATL)", value: Math.round(latest.atl || 0), unit: "", color: C.orange }),
+          /*#__PURE__*/React.createElement(Stat, { label: "Form (TSB)", value: Math.round(latest.tsb || 0), unit: "", color: (latest.tsb || 0) >= 0 ? C.green : C.red })
+        ),
+        /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 8 } },
+          /*#__PURE__*/React.createElement("path", { d: pathOf(ctls), fill: "none", stroke: C.accent, strokeWidth: 1.5 }),
+          /*#__PURE__*/React.createElement("path", { d: pathOf(atls), fill: "none", stroke: C.orange, strokeWidth: 1.5 }),
+          /*#__PURE__*/React.createElement("path", { d: pathOf(tsbs), fill: "none", stroke: C.green, strokeWidth: 1.5, strokeDasharray: "3 2" })
+        ),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" } },
+          [{ c: C.accent, l: "Fitness" }, { c: C.orange, l: "Tretthet" }, { c: C.green, l: "Form" }].map(x => /*#__PURE__*/React.createElement("div", { key: x.l, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.muted } },
+            /*#__PURE__*/React.createElement("div", { style: { width: 10, height: 2, background: x.c } }), x.l))
+        )
+      );
+    })()
   );
 }
 
 function App() {
   const [tab, setTab] = React.useState("dashboard");
+  const [logTargetId, setLogTargetId] = React.useState(null);
   const [authRole, setAuthRole] = React.useState(() => {
     try { return sessionStorage.getItem("nm_auth_role") || null; } catch { return null; }
   });
@@ -7137,6 +7321,68 @@ function App() {
       setTimeout(() => setSyncStatus(""), 4000);
     }).catch(() => setSyncStatus("⚠️ Feilet"));
   }
+
+  const [icuSyncing, setIcuSyncing] = React.useState(false);
+  const [icuHeaderMsg, setIcuHeaderMsg] = React.useState("");
+  async function syncIntervalsGlobal() {
+    if (!icuApiKey || !icuBackend) { setTab("profile"); return; }
+    const base = icuBackend.replace(/\/$/, "");
+    setIcuSyncing(true);
+    setIcuHeaderMsg("synkroniserer...");
+    try {
+      const d = new Date(); const newest = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+      const o = new Date(); o.setDate(o.getDate() - 180);
+      const oldest = `${o.getFullYear()}-${String(o.getMonth()+1).padStart(2,"0")}-${String(o.getDate()).padStart(2,"0")}`;
+      const headers = { "X-Api-Key": icuApiKey, "X-Athlete-Id": icuAthleteId || "0" };
+      const actRes = await fetch(`${base}/api/activities?oldest=${oldest}&newest=${newest}`, { headers });
+      if (!actRes.ok) { const e = await actRes.json().catch(()=>({})); throw new Error(e.error || `HTTP ${actRes.status}`); }
+      const actData = await actRes.json();
+      let wellnessCount = 0;
+      try {
+        const wRes = await fetch(`${base}/api/wellness?oldest=${oldest}&newest=${newest}`, { headers });
+        if (wRes.ok) { const wData = await wRes.json(); if (wData.wellness?.length) { setWellness(wData.wellness, userId); wellnessCount = wData.wellness.length; } }
+      } catch (e) { /* optional */ }
+      const refined = actData.sessions;
+      const localByIcuId = {};
+      sessions.forEach(s => { if (s.icuId) localByIcuId[s.icuId] = s; });
+      const needsDetail = refined.filter(s => {
+        if (s.type !== "intervals" || !s.icuId) return false;
+        const existing = localByIcuId[s.icuId];
+        const hasDetail = existing && ((existing.intervals && existing.intervals.length > 0) || existing.streams);
+        return !hasDetail;
+      });
+      for (const s of needsDetail.slice(0, 20)) {
+        try {
+          const dRes = await fetch(`${base}/api/activity-detail?id=${s.icuId}&include=intervals,streams`, { headers });
+          if (dRes.ok) { const detail = await dRes.json(); if (detail.intervals?.length) s.intervals = detail.intervals; if (detail.streams) s.streams = detail.streams; }
+        } catch (e) { /* skip */ }
+      }
+      const icuIds = new Set(refined.map(s => s.icuId));
+      setSessions(p => {
+        const localByIcu = {};
+        p.forEach(s => { if (s.icuId) localByIcu[s.icuId] = s; });
+        const mergedIcu = refined.map(fresh => {
+          const local = localByIcu[fresh.icuId];
+          if (local && local.userEdited) return local;
+          if (local) {
+            if ((!fresh.intervals || !fresh.intervals.length) && local.intervals && local.intervals.length) fresh.intervals = local.intervals;
+            if (!fresh.streams && local.streams) fresh.streams = local.streams;
+          }
+          return fresh;
+        });
+        const merged = [...p.filter(s => !s.icuId || !icuIds.has(s.icuId)), ...mergedIcu].sort((a, b) => b.date.localeCompare(a.date));
+        if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_sessions", merged);
+        return merged;
+      }, userId);
+      setIcuHeaderMsg(`✓ ${actData.sessions.length} økter`);
+    } catch (err) {
+      setIcuHeaderMsg("⚠️ " + err.message.slice(0, 20));
+    } finally {
+      setIcuSyncing(false);
+      setTimeout(() => setIcuHeaderMsg(""), 4000);
+    }
+  }
+
   const TABS = [{
     id: "dashboard",
     icon: "📊",
@@ -7153,10 +7399,6 @@ function App() {
     id: "stats",
     icon: "📈",
     label: "Statistikk"
-  }, {
-    id: "form",
-    icon: "🎢",
-    label: "Form"
   }, {
     id: "strength",
     icon: "💪",
@@ -7193,7 +7435,8 @@ function App() {
             profile: profile,
             prefs: prefs,
             userId: userId,
-            isAdmin: isAdmin
+            isAdmin: isAdmin,
+            onOpenSession: (sid) => { setLogTargetId(sid); setTab("log"); }
           });
         case "log":
           return /*#__PURE__*/React.createElement(LogTab, {
@@ -7202,11 +7445,15 @@ function App() {
             goals: goals,
             profile: profile,
             userId: userId,
-            isAdmin: isAdmin
+            isAdmin: isAdmin,
+            targetId: logTargetId,
+            clearTarget: () => setLogTargetId(null)
           });
         case "stats":
           return /*#__PURE__*/React.createElement(StatsTab, {
-            sessions: sessions
+            sessions: sessions,
+            wellness: wellness,
+            goals: goals
           });
         case "form":
           return /*#__PURE__*/React.createElement(FormTab, {
@@ -7354,7 +7601,24 @@ function App() {
       fontSize: 11,
       color: syncStatus.startsWith("⚠️") ? C.red : C.green
     }
-  }, syncStatus), userId && sbUrl() && /*#__PURE__*/React.createElement("button", {
+  }, syncStatus), icuHeaderMsg && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: icuHeaderMsg.startsWith("⚠️") ? C.red : C.green
+    }
+  }, icuHeaderMsg), icuApiKey && icuBackend && /*#__PURE__*/React.createElement("button", {
+    onClick: syncIntervalsGlobal,
+    disabled: icuSyncing,
+    style: {
+      background: "none",
+      border: "none",
+      cursor: icuSyncing ? "default" : "pointer",
+      fontSize: 16,
+      padding: 2,
+      opacity: icuSyncing ? 0.5 : 1
+    },
+    title: "Synkroniser fra intervals.icu"
+  }, icuSyncing ? "\u23F3" : "\uD83D\uDD04"), userId && sbUrl() && /*#__PURE__*/React.createElement("button", {
     onClick: manualSync,
     style: {
       background: "none",
@@ -7363,7 +7627,7 @@ function App() {
       fontSize: 16,
       padding: 2
     },
-    title: "Synkroniser"
+    title: "Synkroniser (sky)"
   }, "\u2601\uFE0F"), profile?.name && /*#__PURE__*/React.createElement("span", {
     onClick: () => setTab("profile"),
     style: {
