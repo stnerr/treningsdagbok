@@ -111,6 +111,52 @@ async function saveToSupabase(uid, key, value) {
 }
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+// ─── POLLEN (Oslo, via Open-Meteo Air Quality API — free, no key, CORS-ok) ────
+const POLLEN_LEVELS = [
+  { max: 0, label: "Ingen", color: "#94a3b8" },
+  { max: 10, label: "Lavt", color: "#16a34a" },
+  { max: 30, label: "Moderat", color: "#d97706" },
+  { max: 100, label: "Høyt", color: "#dc2626" },
+  { max: Infinity, label: "Svært høyt", color: "#7c3aed" }
+];
+function pollenLevel(v) {
+  if (v == null) return POLLEN_LEVELS[0];
+  return POLLEN_LEVELS.find(l => v <= l.max) || POLLEN_LEVELS[POLLEN_LEVELS.length - 1];
+}
+// Fetches today's pollen forecast for Oslo. Returns { birch, grass, alder,
+// mugwort, worst: {type,value,level}, date } or null on failure.
+async function fetchOsloPollen() {
+  const url = "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=59.9139&longitude=10.7522&hourly=alder_pollen,birch_pollen,grass_pollen,mugwort_pollen&timezone=Europe%2FOslo&forecast_days=1";
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Pollen-API feilet");
+  const data = await res.json();
+  const h = data.hourly;
+  if (!h || !h.time) return null;
+  // Average the daytime hours (08–20) for a representative daily value
+  const dayIdx = h.time.map((t, i) => ({ t, i })).filter(x => {
+    const hour = parseInt(x.t.slice(11, 13));
+    return hour >= 8 && hour <= 20;
+  }).map(x => x.i);
+  const avg = (arr) => {
+    const vals = dayIdx.map(i => arr?.[i]).filter(v => v != null);
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const types = [
+    { key: "bjørk", value: avg(h.birch_pollen) },
+    { key: "gress", value: avg(h.grass_pollen) },
+    { key: "or", value: avg(h.alder_pollen) },
+    { key: "burot", value: avg(h.mugwort_pollen) }
+  ];
+  const present = types.filter(t => t.value != null);
+  const worst = present.length ? present.reduce((a, b) => b.value > a.value ? b : a) : null;
+  return {
+    date: h.time[0]?.slice(0, 10),
+    types: present,
+    worst: worst ? { type: worst.key, value: worst.value, level: pollenLevel(worst.value) } : null
+  };
+}
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -3133,7 +3179,8 @@ function DashboardTab({
   plannedSessions,
   profile,
   prefs,
-  userId
+  userId,
+  mensLog
 }) {
   const today = todayStr(),
     d = dow(today);
@@ -3148,6 +3195,15 @@ function DashboardTab({
   const wSleep = todayWellness && todayWellness.sleepHours != null ? todayWellness.sleepHours : null;
   const wDate = todayWellness ? todayWellness.date : null;
   const [saving, setSaving] = React.useState(false);
+  // Oslo pollen forecast (fetched once on mount)
+  const [pollen, setPollen] = React.useState(null);
+  const [pollenErr, setPollenErr] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    fetchOsloPollen().then(p => { if (alive) setPollen(p); }).catch(() => { if (alive) setPollenErr(true); });
+    return () => { alive = false; };
+  }, []);
+  const cyclePhaseToday = mensLog && Object.keys(mensLog).length ? cyclePhase(mensLog, today) : null;
   // Feeling (dagsform) stays manual; hr/hrv/sleep come from intervals.icu
   const [hr, setHr] = React.useState(todayMorning.hr || (wHr != null ? String(wHr) : ""));
   const [hrv, setHrv] = React.useState(todayMorning.hrv || (wHrv != null ? String(wHrv) : ""));
@@ -3363,7 +3419,32 @@ function DashboardTab({
       small: true,
       color: C.accent
     }, "+ Logg"))));
-  })), /*#__PURE__*/React.createElement(Card, {
+  })), cyclePhaseToday && /*#__PURE__*/React.createElement(Card, {
+    style: { marginBottom: 12, borderLeft: `4px solid ${cyclePhaseToday.color}` }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700 } }, "🩸 SYKLUS"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: cyclePhaseToday.color } }, cyclePhaseToday.phase, " · dag ", cyclePhaseToday.cycleDay)),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5 } }, cyclePhaseToday.advice)), pollen && pollen.worst && /*#__PURE__*/React.createElement(Card, {
+    style: { marginBottom: 12, borderLeft: `4px solid ${pollen.worst.level.color}` }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700 } }, "🤧 POLLENVARSEL OSLO"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: pollen.worst.level.color } }, pollen.worst.level.label)),
+    /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 10, flexWrap: "wrap" } },
+      pollen.types.map(t => {
+        const lvl = pollenLevel(t.value);
+        return /*#__PURE__*/React.createElement("div", { key: t.key, style: { display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: C.text } },
+          /*#__PURE__*/React.createElement("span", { style: { width: 8, height: 8, borderRadius: "50%", background: lvl.color, display: "inline-block" } }),
+          /*#__PURE__*/React.createElement("span", { style: { textTransform: "capitalize" } }, t.key), " ",
+          /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, lvl.label));
+      })),
+    pollen.worst.level.label !== "Ingen" && pollen.worst.level.label !== "Lavt" && /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: 11, color: C.muted, marginTop: 8 }
+    }, "Vurder antihistamin før økt, og tren gjerne innendørs eller tidlig morgen/etter regn når pollennivået er lavere.")),
+  pollenErr && !pollen && /*#__PURE__*/React.createElement(Card, {
+    style: { marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "🤧 Kunne ikke hente pollenvarsel akkurat nå.")), /*#__PURE__*/React.createElement(Card, {
     style: {
       marginBottom: 12
     }
@@ -3655,6 +3736,7 @@ function CalendarTab({
     desc: "",
     intensity: "easy"
   });
+  const [editingIdx, setEditingIdx] = React.useState(null);
   const today = todayStr();
   function dStr(y, m, d) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -3803,7 +3885,34 @@ function CalendarTab({
         fontSize: 13,
         marginBottom: 8
       }
-    }, "Ingen \xF8kt planlagt"), editSessions.map((s, i) => /*#__PURE__*/React.createElement("div", {
+    }, "Ingen \xF8kt planlagt"), editSessions.map((s, i) => editingIdx === i ? /*#__PURE__*/React.createElement("div", {
+      key: i,
+      style: {
+        background: C.bg,
+        borderRadius: 8,
+        padding: "10px",
+        marginBottom: 6
+      }
+    }, /*#__PURE__*/React.createElement("input", {
+      value: s.label,
+      onChange: e => setEditSessions(p => p.map((x, idx) => idx === i ? { ...x, label: e.target.value } : x)),
+      placeholder: "Tittel",
+      style: { width: "100%", boxSizing: "border-box", background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", fontSize: 13, fontWeight: 700, color: C.text, outline: "none", marginBottom: 6 }
+    }), /*#__PURE__*/React.createElement("textarea", {
+      value: s.desc || "",
+      onChange: e => setEditSessions(p => p.map((x, idx) => idx === i ? { ...x, desc: e.target.value } : x)),
+      placeholder: "Beskrivelse",
+      rows: 2,
+      style: { width: "100%", boxSizing: "border-box", background: C.surface, border: `1.5px solid ${C.border}`, borderRadius: 6, padding: "8px 10px", fontSize: 12, color: C.text, outline: "none", marginBottom: 8, resize: "vertical", fontFamily: "inherit" }
+    }), /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6 } }, /*#__PURE__*/React.createElement(Sel, {
+      value: s.intensity || "easy",
+      onChange: v => setEditSessions(p => p.map((x, idx) => idx === i ? { ...x, intensity: v } : x)),
+      options: [{ value: "hard", label: "Hard 🔴" }, { value: "medium", label: "Medium 🟡" }, { value: "easy", label: "Lett 🟢" }, { value: "rest", label: "Hvile ⚪" }]
+    }), /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setEditingIdx(null),
+      small: true,
+      color: C.green
+    }, "Ferdig"))) : /*#__PURE__*/React.createElement("div", {
       key: i,
       style: {
         display: "flex",
@@ -3835,6 +3944,13 @@ function CalendarTab({
         gap: 4
       }
     }, /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => setEditingIdx(i),
+      small: true,
+      color: C.accent,
+      style: {
+        fontSize: 14
+      }
+    }, "\u270E"), /*#__PURE__*/React.createElement(Btn, {
       onClick: () => {
         setMovingSession({ index: i, session: s, fromDate: selDate });
         setMoveToDate(selDate);
@@ -4615,6 +4731,121 @@ function analyzeSession(session, goals, profile) {
   return msgs;
 }
 
+// ─── SNUFS (nese/pollen-logg) ─────────────────────────────────────────────────
+function SnufsTab({ snufsLog, setSnufsLog, userId }) {
+  const today = todayStr();
+  const existing = snufsLog[today] || {};
+  const [congestion, setCongestion] = React.useState(existing.congestion || "");
+  const [weather, setWeather] = React.useState(existing.weather || "");
+  const [notes, setNotes] = React.useState(existing.notes || "");
+  const [pollen, setPollen] = React.useState(null);
+  const [saved, setSaved] = React.useState(false);
+  React.useEffect(() => {
+    fetchOsloPollen().then(setPollen).catch(() => {});
+  }, []);
+  function save() {
+    const entry = { congestion, weather, notes };
+    if (pollen && pollen.worst) entry.pollen = `${pollen.worst.type} ${pollen.worst.level.label}`;
+    setSnufsLog(p => ({ ...p, [today]: entry }), userId);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+  const congestionOpts = [["lett", "Lett", C.green], ["medium", "Medium", C.yellow], ["tett", "Veldig tett", C.red]];
+  const recent = Object.entries(snufsLog).sort(([a], [b]) => b.localeCompare(a)).slice(0, 14);
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "REGISTRER FOR I DAG"),
+      pollen && pollen.worst && /*#__PURE__*/React.createElement("div", {
+        style: { background: pollen.worst.level.color + "18", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: C.text }
+      }, "🤧 Pollenvarsel Oslo i dag: ", /*#__PURE__*/React.createElement("b", { style: { color: pollen.worst.level.color, textTransform: "capitalize" } }, pollen.worst.type, " ", pollen.worst.level.label)),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 } }, "Grad av tett nese"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
+        congestionOpts.map(([val, lbl, col]) => /*#__PURE__*/React.createElement("div", {
+          key: val, onClick: () => setCongestion(val),
+          style: { flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: congestion === val ? 700 : 400, background: congestion === val ? col + "22" : C.bg, border: `1.5px solid ${congestion === val ? col : C.border}`, color: congestion === val ? col : C.muted }
+        }, lbl))),
+      /*#__PURE__*/React.createElement(Inp, { label: "Utendørsvær", value: weather, onChange: setWeather, placeholder: "f.eks. sol og vind, regn, overskyet" }),
+      /*#__PURE__*/React.createElement(Txta, { label: "Notater", value: notes, onChange: setNotes, rows: 2, placeholder: "Symptomer, medisin tatt, hvordan det påvirket trening ..." }),
+      /*#__PURE__*/React.createElement(Btn, { onClick: save, color: C.green, style: { width: "100%", marginTop: 8 } }, saved ? "Lagret ✓" : "Lagre")),
+    recent.length > 0 && /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE REGISTRERINGER"),
+      recent.map(([date, e]) => {
+        const cOpt = congestionOpts.find(o => o[0] === e.congestion);
+        return /*#__PURE__*/React.createElement("div", { key: date, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12 } },
+          /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, color: C.text } }, formatDateShort(date)),
+            e.pollen && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "🤧 ", e.pollen), e.weather && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, e.weather)),
+          cOpt && /*#__PURE__*/React.createElement("span", { style: { color: cOpt[2], fontWeight: 700 } }, cOpt[1]));
+      })));
+}
+
+// ─── MENSEN (syklus-logg) ─────────────────────────────────────────────────────
+function cyclePhase(mensLog, dateStr) {
+  // Find the most recent period-start on or before dateStr, compute cycle day + phase.
+  const starts = Object.entries(mensLog).filter(([, e]) => e.start).map(([d]) => d).sort();
+  if (!starts.length) return null;
+  const target = new Date(dateStr + "T00:00:00");
+  let lastStart = null;
+  for (const s of starts) { if (new Date(s + "T00:00:00") <= target) lastStart = s; }
+  if (!lastStart) return null;
+  const cycleDay = Math.round((target - new Date(lastStart + "T00:00:00")) / 86400000) + 1;
+  // Estimate average cycle length from history (default 28)
+  let cycleLen = 28;
+  if (starts.length >= 2) {
+    const gaps = [];
+    for (let i = 1; i < starts.length; i++) gaps.push(Math.round((new Date(starts[i] + "T00:00:00") - new Date(starts[i - 1] + "T00:00:00")) / 86400000));
+    const valid = gaps.filter(g => g >= 20 && g <= 40);
+    if (valid.length) cycleLen = Math.round(valid.reduce((a, b) => a + b, 0) / valid.length);
+  }
+  let phase, advice, color;
+  if (cycleDay <= 5) { phase = "Menstruasjon"; color = C.red; advice = "Energien kan være lav. Lytt til kroppen — lette økter eller hvile er helt greit. Jern og hydrering er ekstra viktig."; }
+  else if (cycleDay <= Math.round(cycleLen / 2) - 1) { phase = "Follikkelfase"; color = C.green; advice = "Ofte høyest energi og god restitusjon nå — gunstig tid for harde intervaller, terskeløkter og å bygge belastning."; }
+  else if (cycleDay <= Math.round(cycleLen / 2) + 1) { phase = "Eggløsning"; color = C.accent; advice = "Toppform for styrke og fart, men litt økt skaderisiko rundt eggløsning — god oppvarming før hardøkter."; }
+  else { phase = "Lutealfase"; color = C.yellow; advice = "Kroppstemperatur og hvilepuls kan være litt høyere, og opplevd anstrengelse høyere. Rolige/moderate økter kan føles tyngre enn tallene tilsier — juster etter dagsform."; }
+  return { cycleDay, cycleLen, phase, advice, color, lastStart };
+}
+
+function MensTab({ mensLog, setMensLog, userId }) {
+  const today = todayStr();
+  const existing = mensLog[today] || {};
+  const [isStart, setIsStart] = React.useState(!!existing.start);
+  const [flow, setFlow] = React.useState(existing.flow || "");
+  const [symptoms, setSymptoms] = React.useState(existing.symptoms || "");
+  const [saved, setSaved] = React.useState(false);
+  function save() {
+    setMensLog(p => ({ ...p, [today]: { start: isStart, flow, symptoms } }), userId);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+  const phase = cyclePhase(mensLog, today);
+  const flowOpts = [["lett", "Lett"], ["moderat", "Moderat"], ["kraftig", "Kraftig"]];
+  const recentStarts = Object.entries(mensLog).filter(([, e]) => e.start).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6);
+  return /*#__PURE__*/React.createElement("div", null,
+    phase && /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16, borderLeft: `4px solid ${phase.color}` } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: phase.color } }, phase.phase),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Syklusdag ", phase.cycleDay, " / ~", phase.cycleLen)),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.text, lineHeight: 1.5 } }, phase.advice)),
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "REGISTRER FOR I DAG"),
+      /*#__PURE__*/React.createElement("div", {
+        onClick: () => setIsStart(!isStart),
+        style: { display: "flex", alignItems: "center", gap: 8, padding: "10px", borderRadius: 8, cursor: "pointer", background: isStart ? C.red + "18" : C.bg, border: `1.5px solid ${isStart ? C.red : C.border}`, marginBottom: 12 }
+      }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 16 } }, isStart ? "🔴" : "⚪"), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: isStart ? C.red : C.muted } }, "Første dag i mensen (syklusstart)")),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 } }, "Blødning"),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
+        flowOpts.map(([val, lbl]) => /*#__PURE__*/React.createElement("div", {
+          key: val, onClick: () => setFlow(flow === val ? "" : val),
+          style: { flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: flow === val ? 700 : 400, background: flow === val ? C.red + "18" : C.bg, border: `1.5px solid ${flow === val ? C.red : C.border}`, color: flow === val ? C.red : C.muted }
+        }, lbl))),
+      /*#__PURE__*/React.createElement(Txta, { label: "Symptomer (valgfritt)", value: symptoms, onChange: setSymptoms, rows: 2, placeholder: "Kramper, hodepine, humør, energi ..." }),
+      /*#__PURE__*/React.createElement(Btn, { onClick: save, color: C.green, style: { width: "100%", marginTop: 8 } }, saved ? "Lagret ✓" : "Lagre")),
+    recentStarts.length > 0 && /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE SYKLUSSTART"),
+      recentStarts.map(([date, e]) => /*#__PURE__*/React.createElement("div", { key: date, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12 } },
+        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600, color: C.text } }, formatDateShort(date)),
+        e.flow && /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, e.flow)))));
+}
+
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
 // Simple inline pace/HR chart for a single session, drawn from intervals.icu
 // streams (downsampled server-side). Shows heart rate as a filled line and,
@@ -4658,8 +4889,15 @@ function LogTab({
   userId,
   isAdmin,
   targetId,
-  clearTarget
+  clearTarget,
+  snufsLog,
+  setSnufsLog,
+  mensLog,
+  setMensLog
 }) {
+  const [subTab, setSubTab] = React.useState("trening");
+  const setSnufs = isAdmin ? setSnufsLog : () => alert("Kun admin kan endre.");
+  const setMens = isAdmin ? setMensLog : () => alert("Kun admin kan endre.");
   const setSessions = isAdmin ? _setSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const today = todayStr();
   const emptyForm = {
@@ -4785,7 +5023,12 @@ function LogTab({
     else if (typeFilter !== "all") matchType = s.type === typeFilter;
     return matchSearch && matchType;
   });
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 6, marginBottom: 16, background: C.bg, borderRadius: 10, padding: 4 }
+  }, [["trening", "🏃 Trening"], ["snufs", "🤧 Snufs"], ["mensen", "🩸 Mensen"]].map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
+    key: id, onClick: () => setSubTab(id),
+    style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: subTab === id ? C.surface : "transparent", color: subTab === id ? C.accent : C.muted, boxShadow: subTab === id ? C.shadow : "none" }
+  }, lbl))), subTab === "snufs" ? /*#__PURE__*/React.createElement(SnufsTab, { snufsLog: snufsLog, setSnufsLog: setSnufs, userId: userId }) : subTab === "mensen" ? /*#__PURE__*/React.createElement(MensTab, { mensLog: mensLog, setMensLog: setMens, userId: userId }) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     style: {
       color: C.text,
       fontWeight: 800,
@@ -5353,7 +5596,7 @@ function LogTab({
         whiteSpace: "pre-wrap"
       }
     }, s.notes)));
-  })));
+  }))));
 }
 const DEFAULT_EXERCISES = [{
   id: "pullups",
@@ -7217,6 +7460,8 @@ function App() {
   const [goals, setGoals] = useStore("nm_goals", []);
   const [plannedSessions, setPlannedSessions] = useStore("nm_plan", {});
   const [strengthLog, setStrengthLog] = useStore("nm_strength", {});
+  const [snufsLog, setSnufsLog] = useStore("nm_snufs", {});
+  const [mensLog, setMensLog] = useStore("nm_mens", {});
   const [profile, setProfile] = useStore("nm_profile", {
     name: "",
     normHr: "50",
@@ -7308,6 +7553,14 @@ function App() {
     }
     if (data.nm_strength && Object.keys(data.nm_strength).length) {
       setStrengthLog(data.nm_strength);
+      ok = true;
+    }
+    if (data.nm_snufs && Object.keys(data.nm_snufs).length) {
+      setSnufsLog(data.nm_snufs);
+      ok = true;
+    }
+    if (data.nm_mens && Object.keys(data.nm_mens).length) {
+      setMensLog(data.nm_mens);
       ok = true;
     }
     if (data.nm_profile?.name) {
@@ -7501,7 +7754,8 @@ function App() {
             profile: profile,
             prefs: prefs,
             userId: userId,
-            isAdmin: isAdmin
+            isAdmin: isAdmin,
+            mensLog: mensLog
           });
         case "calendar":
           return /*#__PURE__*/React.createElement(CalendarTab, {
@@ -7525,7 +7779,11 @@ function App() {
             userId: userId,
             isAdmin: isAdmin,
             targetId: logTargetId,
-            clearTarget: () => setLogTargetId(null)
+            clearTarget: () => setLogTargetId(null),
+            snufsLog: snufsLog,
+            setSnufsLog: setSnufsLog,
+            mensLog: mensLog,
+            setMensLog: setMensLog
           });
         case "stats":
           return /*#__PURE__*/React.createElement(StatsTab, {
