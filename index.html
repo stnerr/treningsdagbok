@@ -4959,6 +4959,84 @@ function MensTab({ mensLog, setMensLog, userId }) {
         e.flow && /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, e.flow)))));
 }
 
+// ─── STRENGTH (fritekst-logg i Logg-fanen) ───────────────────────────────────
+function StrengthLogTab({ strengthLog, setStrengthLog, exercises, setExercises, userId }) {
+  const today = todayStr();
+  const [date, setDate] = React.useState(today);
+  const [text, setText] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+  const parsed = parseStrengthText(text, exercises);
+  const recognized = parsed.filter(p => p.exId && p.sets && p.reps);
+  const unrecognized = parsed.filter(p => !p.exId && p.raw);
+
+  function save() {
+    if (!recognized.length) return;
+    // Group by exercise; each becomes/updates an entry in strengthLog[exId]
+    const byEx = {};
+    recognized.forEach(p => {
+      if (!byEx[p.exId]) byEx[p.exId] = [];
+      // one line = N identical sets
+      for (let i = 0; i < p.sets; i++) byEx[p.exId].push({ reps: String(p.reps), weight: p.weight != null ? String(p.weight) : "" });
+    });
+    setStrengthLog(prev => {
+      const next = { ...prev };
+      Object.entries(byEx).forEach(([exId, sets]) => {
+        const existing = (next[exId] || []).filter(e => e.date !== date); // replace same-day entry
+        next[exId] = [...existing, { date, sets, notes: "", raw: text, userEdited: true }];
+      });
+      if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_strength", next);
+      return next;
+    }, userId);
+    setSaved(true);
+    setText("");
+    setTimeout(() => setSaved(false), 2500);
+  }
+
+  // Recent sessions across all exercises, grouped by date
+  const byDate = {};
+  Object.entries(strengthLog).forEach(([exId, entries]) => {
+    const ex = exercises.find(e => e.id === exId);
+    (entries || []).forEach(e => {
+      if (!byDate[e.date]) byDate[e.date] = [];
+      byDate[e.date].push({ ex, entry: e });
+    });
+  });
+  const recentDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a)).slice(0, 10);
+
+  return /*#__PURE__*/React.createElement("div", null,
+    /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement(Inp, { label: "Dato", type: "date", value: date, onChange: setDate }),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6, marginTop: 4 } }, "Skriv hele økta (én øvelse per linje)"),
+      /*#__PURE__*/React.createElement("textarea", {
+        value: text,
+        onChange: e => setText(e.target.value),
+        rows: 6,
+        placeholder: "3 sett x 10 reps x pull-ups @0 kg\n3 sett x 10 reps x knebøy @40 kg\n4x8 markløft 60kg",
+        style: { width: "100%", boxSizing: "border-box", background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: 10, padding: "12px 14px", fontSize: 14, color: C.text, outline: "none", resize: "vertical", fontFamily: "inherit", lineHeight: 1.6 }
+      }),
+      // Live preview of what the parser understood
+      text.trim() && /*#__PURE__*/React.createElement("div", { style: { marginTop: 10 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 6 } }, "TOLKET"),
+        recognized.map((p, i) => /*#__PURE__*/React.createElement("div", { key: i, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "4px 0", color: C.text } },
+          /*#__PURE__*/React.createElement("span", { style: { color: C.green } }, "✓"),
+          /*#__PURE__*/React.createElement("b", null, p.exName), /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, p.sets, " × ", p.reps, " reps", p.weight != null ? ` @ ${p.weight} kg` : ""))),
+        unrecognized.map((p, i) => /*#__PURE__*/React.createElement("div", { key: "u" + i, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, padding: "4px 0", color: C.muted } },
+          /*#__PURE__*/React.createElement("span", { style: { color: C.yellow } }, "?"),
+          /*#__PURE__*/React.createElement("span", null, "«", p.raw, "» – kjente ikke igjen øvelsen"))),
+        unrecognized.length > 0 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4, fontStyle: "italic" } }, "Kjente øvelser: ", exercises.map(e => e.name).join(", "), ". Legg til nye øvelser under Styrke-fanen nederst.")),
+      /*#__PURE__*/React.createElement(Btn, { onClick: save, color: C.green, disabled: !recognized.length, style: { width: "100%", marginTop: 12, opacity: recognized.length ? 1 : 0.5 } }, saved ? "Lagret ✓" : `Lagre${recognized.length ? " " + recognized.length + " øvelse" + (recognized.length > 1 ? "r" : "") : ""}`)),
+    recentDates.length > 0 && /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE STYRKEØKTER"),
+      recentDates.map(d => /*#__PURE__*/React.createElement("div", { key: d, style: { padding: "8px 0", borderBottom: `1px solid ${C.border}` } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 } }, formatDateShort(d)),
+        byDate[d].map(({ ex, entry }, i) => {
+          const setCount = entry.sets?.length || 0;
+          const first = entry.sets?.[0];
+          return /*#__PURE__*/React.createElement("div", { key: i, style: { fontSize: 12, color: C.muted, paddingLeft: 4 } },
+            ex ? ex.icon + " " + ex.name : "Øvelse", ": ", setCount, " sett", first ? ` × ${first.reps} reps${first.weight ? " @ " + first.weight + " kg" : ""}` : "");
+        })))));
+}
+
 // ─── LOG TAB ──────────────────────────────────────────────────────────────────
 // Simple inline pace/HR chart for a single session, drawn from intervals.icu
 // streams (downsampled server-side). Shows heart rate as a filled line and,
@@ -5006,10 +5084,15 @@ function LogTab({
   snufsLog,
   setSnufsLog,
   mensLog,
-  setMensLog
+  setMensLog,
+  strengthLog,
+  setStrengthLog,
+  exercises,
+  setExercises
 }) {
   const [subTab, setSubTab] = React.useState("trening");
   const setSnufs = isAdmin ? setSnufsLog : () => alert("Kun admin kan endre.");
+  const setStrength = isAdmin ? setStrengthLog : () => alert("Kun admin kan endre.");
   const setMens = isAdmin ? setMensLog : () => alert("Kun admin kan endre.");
   const setSessions = isAdmin ? _setSessions : () => alert("Kun admin kan endre. Du er innlogget som besøkende.");
   const today = todayStr();
@@ -5138,10 +5221,10 @@ function LogTab({
   });
   return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", gap: 6, marginBottom: 16, background: C.bg, borderRadius: 10, padding: 4 }
-  }, [["trening", "🏃 Trening"], ["snufs", "🤧 Snufs"], ["mensen", "🩸 Mensen"]].map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
+  }, [["trening", "🏃 Trening"], ["styrke", "💪 Styrke"], ["snufs", "🤧 Snufs"], ["mensen", "🩸 Mensen"]].map(([id, lbl]) => /*#__PURE__*/React.createElement("button", {
     key: id, onClick: () => setSubTab(id),
-    style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: subTab === id ? C.surface : "transparent", color: subTab === id ? C.accent : C.muted, boxShadow: subTab === id ? C.shadow : "none" }
-  }, lbl))), subTab === "snufs" ? /*#__PURE__*/React.createElement(SnufsTab, { snufsLog: snufsLog, setSnufsLog: setSnufs, userId: userId }) : subTab === "mensen" ? /*#__PURE__*/React.createElement(MensTab, { mensLog: mensLog, setMensLog: setMens, userId: userId }) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+    style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 12, fontWeight: 700, cursor: "pointer", background: subTab === id ? C.surface : "transparent", color: subTab === id ? C.accent : C.muted, boxShadow: subTab === id ? C.shadow : "none" }
+  }, lbl))), subTab === "styrke" ? /*#__PURE__*/React.createElement(StrengthLogTab, { strengthLog: strengthLog, setStrengthLog: setStrength, exercises: exercises, setExercises: setExercises, userId: userId }) : subTab === "snufs" ? /*#__PURE__*/React.createElement(SnufsTab, { snufsLog: snufsLog, setSnufsLog: setSnufs, userId: userId }) : subTab === "mensen" ? /*#__PURE__*/React.createElement(MensTab, { mensLog: mensLog, setMensLog: setMens, userId: userId }) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
     style: {
       color: C.text,
       fontWeight: 800,
@@ -5715,23 +5798,59 @@ const DEFAULT_EXERCISES = [{
   id: "pullups",
   name: "Chins / Pull-ups",
   unit: "kg",
-  icon: "🔝"
+  icon: "🔝",
+  aliases: ["pull-ups", "pullups", "pull ups", "chins", "chin-ups", "kroppsheving"]
 }, {
   id: "squat",
   name: "Knebøy",
   unit: "kg",
-  icon: "🏋️"
+  icon: "🏋️",
+  aliases: ["knebøy", "squat", "squats", "kneboy"]
 }, {
   id: "deadlift",
   name: "Markløft",
   unit: "kg",
-  icon: "⬆️"
+  icon: "⬆️",
+  aliases: ["markløft", "deadlift", "marklof"]
 }, {
   id: "dips",
   name: "Dips",
   unit: "kg",
-  icon: "💪"
+  icon: "💪",
+  aliases: ["dips", "dip"]
 }];
+
+// Parses a free-text strength session (one exercise per line) into structured
+// entries. Understands "3 sett x 10 reps x knebøy @40 kg", the "4x8" shorthand,
+// and matches exercise names via each exercise's aliases. Weight from "@N" or
+// "N kg". Returns one row per line with whatever it could extract.
+function parseStrengthText(text, exercises) {
+  const lines = (text || "").split("\n").map(l => l.trim()).filter(Boolean);
+  return lines.map(line => {
+    const low = line.toLowerCase();
+    let sets = (low.match(/(\d+)\s*(?:sett|set)\b/) || [])[1];
+    let reps = (low.match(/(\d+)\s*reps?\b/) || [])[1];
+    if (!sets || !reps) {
+      const sh = low.match(/\b(\d+)\s*[x×]\s*(\d+)\b/);
+      if (sh) { if (!sets) sets = sh[1]; if (!reps) reps = sh[2]; }
+    }
+    let weight = (low.match(/@\s*(\d+(?:[.,]\d+)?)/) || [])[1];
+    if (weight == null) weight = (low.match(/(\d+(?:[.,]\d+)?)\s*kg/) || [])[1];
+    let matchedEx = null;
+    for (const ex of exercises) {
+      const names = [ex.name.toLowerCase(), ...(ex.aliases || [])];
+      if (names.some(n => low.includes(n))) { matchedEx = ex; break; }
+    }
+    return {
+      raw: line,
+      sets: sets ? parseInt(sets) : null,
+      reps: reps ? parseInt(reps) : null,
+      weight: weight != null ? parseFloat(String(weight).replace(",", ".")) : null,
+      exId: matchedEx ? matchedEx.id : null,
+      exName: matchedEx ? matchedEx.name : null
+    };
+  });
+}
 function StrengthTab({
   strengthLog,
   setStrengthLog: _setStrengthLog,
@@ -7591,6 +7710,7 @@ function App() {
   const [goals, setGoals] = useStore("nm_goals", []);
   const [plannedSessions, setPlannedSessions] = useStore("nm_plan", {});
   const [strengthLog, setStrengthLog] = useStore("nm_strength", {});
+  const [exercises, setExercises] = useStore("nm_exercises", DEFAULT_EXERCISES);
   const [snufsLog, setSnufsLog] = useStore("nm_snufs", {});
   const [mensLog, setMensLog] = useStore("nm_mens", {});
   const [profile, setProfile] = useStore("nm_profile", {
@@ -7914,7 +8034,11 @@ function App() {
             snufsLog: snufsLog,
             setSnufsLog: setSnufsLog,
             mensLog: mensLog,
-            setMensLog: setMensLog
+            setMensLog: setMensLog,
+            strengthLog: strengthLog,
+            setStrengthLog: setStrengthLog,
+            exercises: exercises,
+            setExercises: setExercises
           });
         case "stats":
           return /*#__PURE__*/React.createElement(StatsTab, {
