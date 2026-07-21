@@ -110,7 +110,54 @@ async function saveToSupabase(uid, key, value) {
   });
 }
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
+// Runs a real write + read against Supabase and returns a human-readable
+// result, surfacing the actual HTTP status/error so sync problems are visible
+// instead of failing silently.
+async function testSupabaseConnection(uid) {
+  const url = sbUrl(), key = sbKey();
+  if (!url) return { ok: false, msg: "Mangler Supabase URL." };
+  if (!key) return { ok: false, msg: "Mangler Supabase Anon Key." };
+  if (!uid) return { ok: false, msg: "Mangler Bruker-ID (trykk «Sett bruker-ID»)." };
+  const testKey = "nm_conntest";
+  const testVal = JSON.stringify({ t: Date.now() });
+  // 1) Try to write
+  let writeRes;
+  try {
+    writeRes = await fetch(`${url}/rest/v1/training_data?on_conflict=user_id,key`, {
+      method: "POST",
+      headers: { "apikey": key, "Authorization": `Bearer ${key}`, "Content-Type": "application/json", "Prefer": "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ user_id: uid, key: testKey, value: testVal, updated_at: new Date().toISOString() })
+    });
+  } catch (e) {
+    return { ok: false, msg: "Nettverksfeil ved skriving: " + e.message + " (sjekk at URL-en er riktig)." };
+  }
+  if (!writeRes.ok) {
+    const body = await writeRes.text();
+    let hint = "";
+    if (writeRes.status === 401 || writeRes.status === 403) hint = " → Nøkkelen er feil/utløpt, eller Row Level Security blokkerer skriving.";
+    else if (writeRes.status === 404) hint = " → Tabellen «training_data» finnes ikke, eller URL-en er feil.";
+    else if (body.includes("on_conflict") || body.includes("constraint") || body.includes("42P10")) hint = " → Tabellen mangler unik nøkkel på (user_id, key). Se løsning under.";
+    return { ok: false, msg: `Skriving feilet (HTTP ${writeRes.status}): ${body.slice(0, 160)}${hint}` };
+  }
+  // 2) Try to read it back
+  let readRes;
+  try {
+    readRes = await fetch(`${url}/rest/v1/training_data?user_id=eq.${encodeURIComponent(uid)}&key=eq.${testKey}&select=value`, {
+      headers: { "apikey": key, "Authorization": `Bearer ${key}` }
+    });
+  } catch (e) {
+    return { ok: false, msg: "Skriving OK, men lesing ga nettverksfeil: " + e.message };
+  }
+  if (!readRes.ok) {
+    const body = await readRes.text();
+    return { ok: false, msg: `Skriving OK, men lesing feilet (HTTP ${readRes.status}): ${body.slice(0, 160)}` };
+  }
+  const rows = await readRes.json().catch(() => null);
+  if (!Array.isArray(rows) || !rows.length) {
+    return { ok: false, msg: "Skriving svarte OK, men data kom ikke tilbake ved lesing. Sjekk Row Level Security (SELECT-policy) for anon-nøkkelen." };
+  }
+  return { ok: true, msg: "Tilkobling fungerer! Skriving og lesing mot Supabase er OK." };
+}
 
 // ─── POLLEN (Oslo, via Open-Meteo Air Quality API — free, no key, CORS-ok) ────
 const POLLEN_LEVELS = [
@@ -6493,6 +6540,8 @@ function ProfileTab({
   const [supabaseKey, setSupabaseKey] = useStore("nm_supabase_key", "");
   const [syncUserId, setSyncUserId] = useStore("nm_user_id", "");
   const [userIdInput, setUserIdInput] = React.useState(syncUserId);
+  const [connTest, setConnTest] = React.useState(null);
+  const [connTesting, setConnTesting] = React.useState(false);
 
   // Training prefs
   const ALL_DAYS = [{
@@ -7174,7 +7223,23 @@ function ProfileTab({
       color: C.green,
       marginTop: 4
     }
-  }, "\u2713 Synkronisering aktiv som: ", /*#__PURE__*/React.createElement("b", null, syncUserId))),
+  }, "\u2713 Synkronisering aktiv som: ", /*#__PURE__*/React.createElement("b", null, syncUserId)), /*#__PURE__*/React.createElement(Btn, {
+    onClick: async () => {
+      setConnTesting(true);
+      setConnTest(null);
+      const uid = userIdInput || syncUserId;
+      const result = await testSupabaseConnection(uid);
+      setConnTest(result);
+      setConnTesting(false);
+    },
+    small: true,
+    color: C.muted,
+    style: { marginTop: 8, marginLeft: 8 }
+  }, connTesting ? "Tester ..." : "Test tilkobling"), connTest && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 12, color: connTest.ok ? C.green : C.red, marginTop: 8, background: (connTest.ok ? C.green : C.red) + "12", borderRadius: 8, padding: "8px 10px", lineHeight: 1.5 }
+  }, connTest.ok ? "✅ " : "⚠️ ", connTest.msg, !connTest.ok && connTest.msg.includes("unik nøkkel") && /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 8, fontFamily: "monospace", fontSize: 11, background: C.bg, borderRadius: 6, padding: "8px", color: C.text, whiteSpace: "pre-wrap", userSelect: "all" }
+  }, "ALTER TABLE training_data\n  ADD CONSTRAINT training_data_user_key\n  UNIQUE (user_id, key);"))),
   /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#3b82f6", fontWeight: 700, marginBottom: 8 } }, "\uD83D\uDCC8 INTERVALS.ICU"),
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10 } }, "Henter data fra Garmin via intervals.icu, inkludert ferdig utregnet form (CTL/ATL/TSB) og helsedata."),
