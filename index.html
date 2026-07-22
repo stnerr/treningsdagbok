@@ -239,6 +239,15 @@ function addDays(s, n) {
   d.setDate(d.getDate() + n);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+// Monday (as YYYY-MM-DD) of the week containing dateStr. Global so both the
+// goal analysis and the statistics tab can use it.
+function mondayOf(dateStr) {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 function fmtPace(m) {
   if (!m || isNaN(m)) return null;
   let min = Math.floor(m);
@@ -2896,8 +2905,13 @@ function analyzeGoalProgress({
   const now = new Date();
   const last4 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 28 && ["easy", "intervals", "long", "race"].includes(s.type));
   const last8 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 56 && ["easy", "intervals", "long", "race"].includes(s.type));
+  const last7 = sessions.filter(s => (now - new Date(s.date + "T00:00:00")) / 86400000 <= 7 && ["easy", "intervals", "long", "race"].includes(s.type));
   if (!last4.length) return [`Loggfør løpeøkter for å analysere fremgangen mot ${goal.name}.`];
-  const km4 = last4.reduce((a, s) => a + (parseFloat(s.km) || 0), 0) / 4;
+  // Average over the number of weeks that actually have data (max 4), so a short
+  // log history isn't diluted by dividing by a fixed 4 weeks.
+  const weeksWithData = new Set(last4.map(s => mondayOf(s.date))).size || 1;
+  const km4 = last4.reduce((a, s) => a + (parseFloat(s.km) || 0), 0) / weeksWithData;
+  const kmLastWeek = last7.reduce((a, s) => a + (parseFloat(s.km) || 0), 0);
   const dist = parseFloat(goal.distanceKm) || 0;
   const rec = dist < 10 ? 30 : dist < 21.1 ? 50 : dist < 42.2 ? 65 : 80;
   const racePace = parseTargetPace(goal);
@@ -2905,7 +2919,7 @@ function analyzeGoalProgress({
   lines.push(`📅 ${dLeft > 0 ? dLeft + " dager til" : "Løpsdag:"} ${goal.name}`);
 
   // 1. Volume
-  if (km4 < rec * 0.55) lines.push(`📉 Lavt volum: ${km4.toFixed(0)}km/uke (anbefalt ~${rec}km). Øk gradvis med maks 10%/uke.`);else if (km4 > rec * 1.35) lines.push(`📈 Høyt volum (${km4.toFixed(0)}km/uke). Skaderisiko – prioriter søvn og ernæring.`);else lines.push(`✅ Godt volum: ${km4.toFixed(0)}km/uke.`);
+  if (km4 < rec * 0.55) lines.push(`📉 Snitt siste 4 uker: ${km4.toFixed(0)}km/uke (anbefalt ~${rec}km). Siste uke: ${kmLastWeek.toFixed(0)}km. Øk gradvis med maks 10%/uke.`);else if (km4 > rec * 1.35) lines.push(`📈 Høyt volum: ${km4.toFixed(0)}km/uke snitt (siste uke: ${kmLastWeek.toFixed(0)}km). Skaderisiko – prioriter søvn og ernæring.`);else lines.push(`✅ Godt volum: ${km4.toFixed(0)}km/uke snitt siste 4 uker (siste uke: ${kmLastWeek.toFixed(0)}km).`);
 
   // 2. Intensity distribution (80/20 rule)
   const hard = last4.filter(s => s.type === "intervals").length,
@@ -5157,6 +5171,7 @@ function LogTab({
     temp: "",
     humidity: "",
     elevGain: "",
+    gradePct: "",
     bikeKmh: "",
     bikeWatts: "",
     swimPace: "",
@@ -5192,6 +5207,11 @@ function LogTab({
   // Auto-calc GAP, HAP, grade% for running
   React.useEffect(() => {
     if (isBike || isSwim) return;
+    // If user entered a grade %, keep elevGain in sync with distance
+    if (form.gradePct && form.km) {
+      const elev = String(Math.round(parseFloat(form.gradePct) / 100 * parseFloat(form.km) * 1000));
+      if (elev !== form.elevGain) { setForm(f => ({ ...f, elevGain: elev })); return; }
+    }
     if (form.avgPace && form.elevGain && form.km) {
       const g = calcGAP(form.avgPace, form.elevGain, form.km);
       setForm(f => ({
@@ -5206,7 +5226,7 @@ function LogTab({
         hap: h || ""
       }));
     }
-  }, [form.avgPace, form.elevGain, form.km, form.temp, form.type]);
+  }, [form.avgPace, form.elevGain, form.km, form.temp, form.type, form.gradePct]);
 
   // Auto-calc bike km/h and watts
   React.useEffect(() => {
@@ -5535,9 +5555,21 @@ function LogTab({
     value: form.elevGain,
     onChange: v => setForm(p => ({
       ...p,
-      elevGain: v
+      elevGain: v,
+      gradePct: ""
     }))
-  })), form.elevGain && form.km && /*#__PURE__*/React.createElement("div", {
+  }), /*#__PURE__*/React.createElement(Inp, {
+    label: "Stigning %",
+    type: "number",
+    value: form.gradePct || "",
+    onChange: v => setForm(p => {
+      const km = parseFloat(p.km);
+      const elev = v && km ? Math.round(parseFloat(v) / 100 * km * 1000) : p.elevGain;
+      return { ...p, gradePct: v, elevGain: v && km ? String(elev) : p.elevGain };
+    })
+  })), form.gradePct && form.km && /*#__PURE__*/React.createElement("div", {
+    style: { fontSize: 11, color: C.muted, marginBottom: 8 }
+  }, "\uD83C\uDFC3 M\xF8lle: ", form.gradePct, "% stigning \xD7 ", form.km, " km = ", /*#__PURE__*/React.createElement("b", { style: { color: C.text } }, form.elevGain, " h\xF8ydemeter")), form.elevGain && form.km && !form.gradePct && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
       color: C.muted,
@@ -6497,6 +6529,7 @@ function GoalsTab({
 function ProfileTab({
   profile,
   setProfile: _setProfile,
+  onBack,
   sessions,
   setSessions,
   wellness,
@@ -6819,7 +6852,10 @@ function ProfileTab({
     f: "zone5",
     c: C.red
   }];
-  return /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("h3", {
+  return /*#__PURE__*/React.createElement("div", null, onBack && /*#__PURE__*/React.createElement("button", {
+    onClick: onBack,
+    style: { display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: C.accent, fontSize: 14, fontWeight: 600, cursor: "pointer", padding: "0 0 12px", marginTop: -4 }
+  }, "\u2039 Tilbake"), /*#__PURE__*/React.createElement("h3", {
     style: {
       color: C.text,
       fontWeight: 800,
@@ -7451,13 +7487,6 @@ function StatsTab({ sessions, wellness, goals }) {
   function fmtLocal(d) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
-  function mondayOf(dateStr) {
-    const d = new Date(dateStr + "T00:00:00");
-    const day = d.getDay();
-    const offset = day === 0 ? -6 : 1 - day;
-    d.setDate(d.getDate() + offset);
-    return fmtLocal(d);
-  }
   function monthKey(dateStr) {
     return dateStr.slice(0, 7); // YYYY-MM
   }
@@ -7488,12 +7517,16 @@ function StatsTab({ sessions, wellness, goals }) {
       const val = metric === "km" ? (parseFloat(s.km) || 0) : (parseFloat(s.totalTime) || 0) / 60;
       return acc + val;
     }, 0);
+    const sumKm = (fn) => bs.filter(fn).reduce((acc, s) => acc + (parseFloat(s.km) || 0), 0);
+    const sumMin = (fn) => bs.filter(fn).reduce((acc, s) => acc + (parseFloat(s.totalTime) || 0), 0);
     return {
       key: b.key, label: b.label,
       run: sum(s => isRun(s.type)),
       bike: sum(s => s.type === "bike"),
       swim: sum(s => s.type === "alt"),
-      total: sum(() => true)
+      total: sum(() => true),
+      totalKm: sumKm(() => true),
+      totalMin: sumMin(() => true)
     };
   });
 
@@ -7512,6 +7545,11 @@ function StatsTab({ sessions, wellness, goals }) {
 
   const SPORT_COLORS = { run: C.accent, bike: C.orange, swim: C.lightblue };
   function fmtVal(v) { return v.toFixed(1); }
+  function fmtDuration(min) {
+    const h = Math.floor(min / 60);
+    const m = Math.round(min % 60);
+    return h > 0 ? `${h}t ${String(m).padStart(2, "0")}` : `${m} min`;
+  }
 
   // ── Fitness trend: average pace & HR per run type over recent months ──
   function paceToSec(p) {
@@ -7524,24 +7562,34 @@ function StatsTab({ sessions, wellness, goals }) {
     const m = Math.floor(s / 60), sec = Math.round(s % 60);
     return `${m}:${String(sec).padStart(2, "0")}`;
   }
-  const fitMonths = [];
+  // Periods for the fitness trend follow the week/month toggle. Weekly shows
+  // the last ~10 weeks; monthly shows the last 6 months.
+  const fitPeriods = [];
   {
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
-      const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      fitMonths.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`);
+    if (grouping === "week") {
+      for (let i = 9; i >= 0; i--) {
+        const d = new Date(now); d.setDate(d.getDate() - i * 7);
+        fitPeriods.push(mondayOf(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`));
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        fitPeriods.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}`);
+      }
     }
   }
+  const fitKeyOf = (dateStr) => grouping === "week" ? mondayOf(dateStr) : dateStr.slice(0, 7);
   const fitTypes = [
     { key: "easy", label: "Rolige turer", color: C.accent },
     { key: "long", label: "Langturer", color: C.lightblue },
     { key: "intervals", label: "Intervalldrag", color: C.red }
   ];
-  // For each type, average pace (sec/km) per month. For intervals, average the
+  // For each type, average pace (sec/km) per period. For intervals, average the
   // non-pause drag paces within each session, then across sessions.
   const fitData = fitTypes.map(t => {
-    const monthly = fitMonths.map(mk => {
-      const ms = sessions.filter(s => s.type === t.key && s.date.slice(0, 7) === mk);
+    const monthly = fitPeriods.map(mk => {
+      const ms = sessions.filter(s => s.type === t.key && fitKeyOf(s.date) === mk);
       let paceVals = [];
       let hrVals = [];
       ms.forEach(s => {
@@ -7643,21 +7691,23 @@ function StatsTab({ sessions, wellness, goals }) {
     // Table
     /*#__PURE__*/React.createElement(Card, null,
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, (grouping === "week" ? "UKESOVERSIKT" : "MÅNEDSOVERSIKT")),
-      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 700, color: C.muted, paddingBottom: 6, borderBottom: "1px solid " + C.border } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1.3fr 0.8fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 11, fontWeight: 700, color: C.muted, paddingBottom: 6, borderBottom: "1px solid " + C.border } },
         /*#__PURE__*/React.createElement("div", null, grouping === "week" ? "Uke fra" : "Måned"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.accent } }, "🏃"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.orange } }, "🚴"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.lightblue } }, "🏊"),
-        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } }, "Sum")
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } }, "km"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right" } }, "tid")
       ),
       [...data].reverse().filter(w => w.total > 0).map((w, i) => /*#__PURE__*/React.createElement("div", {
-        key: i, style: { display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: "1px solid " + C.border }
+        key: i, style: { display: "grid", gridTemplateColumns: "1.3fr 0.8fr 0.8fr 0.8fr 1fr 1fr", gap: 4, fontSize: 12, padding: "6px 0", borderBottom: "1px solid " + C.border }
       },
         /*#__PURE__*/React.createElement("div", { style: { color: C.text, fontWeight: 600 } }, w.label),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.run > 0 ? fmtVal(w.run) : "–"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.bike > 0 ? fmtVal(w.bike) : "–"),
         /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", color: C.muted } }, w.swim > 0 ? fmtVal(w.swim) : "–"),
-        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", fontWeight: 700, color: C.text } }, fmtVal(w.total))
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", fontWeight: 700, color: C.text } }, w.totalKm > 0 ? w.totalKm.toFixed(1) : "–"),
+        /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", fontWeight: 700, color: C.accent } }, w.totalMin > 0 ? fmtDuration(w.totalMin) : "–")
       )),
       totalAll === 0 && /*#__PURE__*/React.createElement("div", { style: { color: C.muted, textAlign: "center", padding: 20, fontSize: 13 } }, "Ingen økter registrert ennå")
     ),
@@ -7671,7 +7721,7 @@ function StatsTab({ sessions, wellness, goals }) {
         const present = vals.filter(v => v != null);
         const min = Math.min(...present), max = Math.max(...present);
         const range = (max - min) || 1;
-        const W = 300, H = 54, pad = 4;
+        const W = 300, H = 68, pad = 12;
         const pts = t.monthly.map((m, i) => m.pace == null ? null : {
           x: pad + (i / (t.monthly.length - 1)) * (W - pad * 2),
           y: pad + (m.pace - min) / range * (H - pad * 2),
@@ -7688,18 +7738,20 @@ function StatsTab({ sessions, wellness, goals }) {
           ),
           /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 6 } },
             /*#__PURE__*/React.createElement("path", { d: path, fill: "none", stroke: t.color, strokeWidth: 2 }),
-            ...pts.map((p, i) => /*#__PURE__*/React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: 2.5, fill: t.color }))
+            ...pts.map((p, i) => /*#__PURE__*/React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: 2.5, fill: t.color })),
+            ...pts.map((p, i) => /*#__PURE__*/React.createElement("text", { key: "t" + i, x: p.x, y: p.y - 5, fontSize: 8, fill: t.color, textAnchor: "middle", fontWeight: 700 }, secToPace(p.v)))
           ),
           /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 2 } },
-            first && /*#__PURE__*/React.createElement("span", null, secToPace(first.pace), "/km"),
-            last && /*#__PURE__*/React.createElement("span", null, secToPace(last.pace), "/km")
+            first && /*#__PURE__*/React.createElement("span", null, "Start: ", secToPace(first.pace), "/km"),
+            last && /*#__PURE__*/React.createElement("span", null, "Nå: ", secToPace(last.pace), "/km")
           )
         );
       }),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 4, borderTop: `1px solid ${C.border}`, paddingTop: 6 } },
-        fitMonths.map((mk, i) => {
+        fitPeriods.map((mk, i) => {
           const monthNames = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
-          return /*#__PURE__*/React.createElement("span", { key: i, style: { flex: 1, textAlign: "center" } }, monthNames[parseInt(mk.slice(5)) - 1]);
+          const lbl = grouping === "week" ? mk.slice(5).replace("-", "/") : monthNames[parseInt(mk.slice(5)) - 1];
+          return /*#__PURE__*/React.createElement("span", { key: i, style: { flex: 1, textAlign: "center", fontSize: grouping === "week" ? 8 : 9 } }, lbl);
         })
       )
     ),
@@ -7712,9 +7764,13 @@ function StatsTab({ sessions, wellness, goals }) {
       const allVals = [...ctls, ...atls];
       const maxV = Math.max(...allVals, 1), minV = Math.min(...tsbs, 0);
       const W = 300, H = 100, pad = 4;
-      const xFor = i => pad + (i / (rows.length - 1)) * (W - pad * 2);
+      const padL = 22;
+      const xFor = i => padL + (i / (rows.length - 1)) * (W - padL - pad);
       const yFor = v => pad + (1 - (v - minV) / ((maxV - minV) || 1)) * (H - pad * 2);
       const pathOf = arr => arr.map((v, i) => `${i === 0 ? "M" : "L"}${xFor(i).toFixed(1)},${yFor(v).toFixed(1)}`).join(" ");
+      // Y-axis gridline values (rounded to nice numbers)
+      const yTicks = [];
+      { const steps = 4; for (let i = 0; i <= steps; i++) { yTicks.push(Math.round(minV + (maxV - minV) * i / steps)); } }
       const latest = rows[rows.length - 1];
       return /*#__PURE__*/React.createElement(Card, { style: { marginTop: 16 } },
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "FORMKURVE (SISTE 90 DAGER)"),
@@ -7724,6 +7780,12 @@ function StatsTab({ sessions, wellness, goals }) {
           /*#__PURE__*/React.createElement(Stat, { label: "Form (TSB)", value: Math.round(latest.tsb || 0), unit: "", color: (latest.tsb || 0) >= 0 ? C.green : C.red })
         ),
         /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 8 } },
+          ...yTicks.map((tv, i) => {
+            const y = yFor(tv);
+            return /*#__PURE__*/React.createElement("g", { key: "g" + i },
+              /*#__PURE__*/React.createElement("line", { x1: padL, y1: y, x2: W - pad, y2: y, stroke: C.border, strokeWidth: 0.5 }),
+              /*#__PURE__*/React.createElement("text", { x: padL - 3, y: y + 3, fontSize: 8, fill: C.muted, textAnchor: "end" }, tv));
+          }),
           /*#__PURE__*/React.createElement("path", { d: pathOf(ctls), fill: "none", stroke: C.accent, strokeWidth: 1.5 }),
           /*#__PURE__*/React.createElement("path", { d: pathOf(atls), fill: "none", stroke: C.orange, strokeWidth: 1.5 }),
           /*#__PURE__*/React.createElement("path", { d: pathOf(tsbs), fill: "none", stroke: C.green, strokeWidth: 1.5, strokeDasharray: "3 2" })
@@ -7739,6 +7801,8 @@ function StatsTab({ sessions, wellness, goals }) {
 
 function App() {
   const [tab, setTab] = React.useState("dashboard");
+  const [prevTab, setPrevTab] = React.useState("dashboard");
+  function goToProfile() { setPrevTab(tab === "profile" ? prevTab : tab); setTab("profile"); }
   const [logTargetId, setLogTargetId] = React.useState(null);
   const [authRole, setAuthRole] = React.useState(() => {
     try { return sessionStorage.getItem("nm_auth_role") || null; } catch { return null; }
@@ -8137,6 +8201,7 @@ function App() {
           return /*#__PURE__*/React.createElement(ProfileTab, {
             profile: profile,
             setProfile: setProfile,
+            onBack: () => setTab(prevTab),
             sessions: sessions,
             setSessions: setSessions,
             wellness: wellness,
@@ -8285,7 +8350,7 @@ function App() {
     },
     title: "Synkroniser (sky)"
   }, "\u2601\uFE0F"), profile?.name && /*#__PURE__*/React.createElement("span", {
-    onClick: () => setTab("profile"),
+    onClick: goToProfile,
     style: {
       fontSize: 13,
       color: tab === "profile" ? C.accent : C.text,
