@@ -292,6 +292,18 @@ function calcPace(km, min) {
   const p = parseFloat(min) / parseFloat(km);
   return fmtPace(p) || "";
 }
+// GAP for a single interval drag. Distance comes from explicit km in dur, or is
+// computed from pace × time — so treadmill drags logged by time still get GAP.
+function intervalGAP(iv) {
+  if (!iv.pace || !iv.elev || !iv.dur) return null;
+  let distKm = iv.dur.includes("km") ? parseFloat(iv.dur) : null;
+  if (!distKm) {
+    const paceMin = parsePace(iv.pace);
+    const durMin = parseDurMin(iv.dur);
+    if (paceMin && durMin) distKm = durMin / paceMin;
+  }
+  return distKm ? calcGAP(iv.pace, iv.elev, distKm) : null;
+}
 // GAP: grade-adjusted pace (~3.3% per 1% grade)
 function calcGAP(pace, elevM, distKm) {
   if (!pace || !elevM || !distKm) return null;
@@ -357,17 +369,24 @@ function icsDate(dateStr) {
   return dateStr.replace(/-/g, "");
 }
 function generateICS(prefs, goals, profile, plannedSessions, daysAhead) {
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Treningsdagbok//NO", "CALSCALE:GREGORIAN"];
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Treningsdagbok//NO", "CALSCALE:GREGORIAN", "METHOD:PUBLISH"];
   const start = todayStr();
+  // A bumped SEQUENCE tells Apple/iCloud that a re-imported event with the same
+  // UID is an UPDATE, not a new event — so editing a session and re-importing
+  // replaces the old one instead of creating a duplicate.
+  const seq = Math.floor(Date.now() / 60000) % 100000;
   for (let i = 0; i < daysAhead; i++) {
     const date = addDays(start, i);
     const plans = getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, date);
     plans.forEach((p, idx) => {
       if (!p.type || p.type === "rest") return;
       const dateNoD = icsDate(date);
-      const uid = `${dateNoD}-${idx}-${p.type}@treningsdagbok`;
+      // Stable UID: date + type only (not index), so the same planned session
+      // keeps its identity across exports even if order changes.
+      const uid = `td-${dateNoD}-${p.type}-${idx}@treningsdagbok`;
       lines.push("BEGIN:VEVENT");
       lines.push(`UID:${uid}`);
+      lines.push(`SEQUENCE:${seq}`);
       lines.push(`DTSTAMP:${dateNoD}T000000Z`);
       lines.push(`DTSTART;VALUE=DATE:${dateNoD}`);
       lines.push(`SUMMARY:${icsEscape(p.label.replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF]/gu, "").trim())}`);
@@ -4218,6 +4237,55 @@ function CalendarTab({
       }
     }, "Lagre")));
   }
+  if (viewMode === "web") {
+    const { year, month } = curMonth;
+    const firstDow = (new Date(year, month, 1).getDay() + 6) % 7; // Monday=0
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const typeColor = (s) => {
+      if (s.type === "race") return C.red;
+      if (s.type === "intervals") return C.orange;
+      if (s.type === "long") return C.lightblue;
+      if (s.type === "bike") return C.orange;
+      if (s.type === "alt") return C.lightblue;
+      return C.green;
+    };
+    const cells = [];
+    for (let i = 0; i < firstDow; i++) cells.push(null);
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    return /*#__PURE__*/React.createElement("div", null,
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 } },
+        /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800 } }, /*#__PURE__*/React.createElement("span", { style: { textTransform: "capitalize" } }, MONTHS[month]), " ", year),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, alignItems: "center" } },
+          /*#__PURE__*/React.createElement(Btn, { onClick: prevMonth, small: true, color: C.muted }, "\u2039"),
+          /*#__PURE__*/React.createElement(Btn, { onClick: () => setCurMonth({ year: new Date().getFullYear(), month: new Date().getMonth() }), small: true, color: C.muted }, "I dag"),
+          /*#__PURE__*/React.createElement(Btn, { onClick: nextMonth, small: true, color: C.muted }, "\u203A"),
+          /*#__PURE__*/React.createElement(Btn, { onClick: () => setViewMode("calendar"), small: true, color: C.accent, outline: true, style: { fontSize: 11 } }, "\uD83D\uDCC5"))),
+      /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderTop: `1px solid ${C.border}`, borderLeft: `1px solid ${C.border}` } },
+        CAL_DAYS.map(d => /*#__PURE__*/React.createElement("div", { key: "h" + d, style: { textAlign: "center", fontSize: 10, color: C.muted, fontWeight: 700, padding: "4px 0", borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textTransform: "lowercase" } }, d)),
+        cells.map((day, i) => {
+          if (day === null) return /*#__PURE__*/React.createElement("div", { key: "c" + i, style: { minHeight: 74, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, background: C.bg } });
+          const date = dStr(year, month, day);
+          const plans = getPlans(date), done = getDone(date);
+          const isToday = date === today;
+          const isGoal = goalDates.has(date);
+          return /*#__PURE__*/React.createElement("div", {
+            key: "c" + i,
+            onClick: () => { setInfoDate(date); setSelDate(date); },
+            style: { minHeight: 74, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: 3, cursor: "pointer", background: isToday ? C.accent + "0c" : C.surface, overflow: "hidden" }
+          },
+            /*#__PURE__*/React.createElement("div", { style: { textAlign: "right", marginBottom: 2 } },
+              /*#__PURE__*/React.createElement("span", { style: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: 18, height: 18, borderRadius: "50%", fontSize: 11, fontWeight: isToday ? 800 : 600, background: isToday ? C.red : "transparent", color: isToday ? "#fff" : isGoal ? C.red : C.text } }, day)),
+            done.map((s, k) => /*#__PURE__*/React.createElement("div", { key: "d" + k, style: { fontSize: 9, lineHeight: 1.3, color: C.green, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 2 } },
+              /*#__PURE__*/React.createElement("span", { style: { width: 5, height: 5, borderRadius: "50%", background: C.green, flexShrink: 0 } }), "\u2713 ", s.title || typeLabel(s.type))),
+            plans.slice(0, 3).map((p, k) => /*#__PURE__*/React.createElement("div", { key: "p" + k, style: { fontSize: 9, lineHeight: 1.3, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", alignItems: "center", gap: 2 } },
+              /*#__PURE__*/React.createElement("span", { style: { width: 5, height: 5, borderRadius: "50%", background: typeColor(p), flexShrink: 0 } }), (p.label || typeLabel(p.type)).replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF]/gu, "").trim())),
+            plans.length > 3 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: C.muted } }, "+", plans.length - 3));
+        })),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10, textAlign: "center" } }, "Trykk på en dag for å se og redigere økter"),
+      selDate && /*#__PURE__*/React.createElement(EditModal, null),
+      movingSession && /*#__PURE__*/React.createElement(MoveModal, null));
+  }
   if (viewMode === "list") {
     const dates = Array.from({
       length: 90
@@ -4348,6 +4416,12 @@ function CalendarTab({
     small: true,
     color: C.accent
   }, "\uD83D\uDCC5"), /*#__PURE__*/React.createElement(Btn, {
+    onClick: () => setViewMode("web"),
+    small: true,
+    color: C.accent,
+    outline: true,
+    style: { fontSize: 11 }
+  }, "Web"), /*#__PURE__*/React.createElement(Btn, {
     onClick: () => setViewMode("list"),
     small: true,
     color: C.accent,
@@ -4799,7 +4873,13 @@ function IntervalBuilder({
       width: 54
     }
   }), iv.pace && iv.elev && iv.dur && (() => {
-    const distKm = iv.dur.includes("km") ? parseFloat(iv.dur) : null;
+    // Distance: explicit km in dur, else compute from pace × time
+    let distKm = iv.dur.includes("km") ? parseFloat(iv.dur) : null;
+    if (!distKm) {
+      const paceMin = parsePace(iv.pace);
+      const durMin = parseDurMin(iv.dur);
+      if (paceMin && durMin) distKm = durMin / paceMin;
+    }
     const gap = distKm ? calcGAP(iv.pace, iv.elev, distKm) : null;
     return gap ? /*#__PURE__*/React.createElement("div", {
       style: {
@@ -4908,7 +4988,8 @@ function analyzeSession(session, goals, profile) {
 // ─── SNUFS (nese/pollen-logg) ─────────────────────────────────────────────────
 function SnufsTab({ snufsLog, setSnufsLog, userId }) {
   const today = todayStr();
-  const existing = snufsLog[today] || {};
+  const [date, setDate] = React.useState(today);
+  const existing = snufsLog[date] || {};
   const [congestion, setCongestion] = React.useState(existing.congestion || "");
   const [weather, setWeather] = React.useState(existing.weather || "");
   const [notes, setNotes] = React.useState(existing.notes || "");
@@ -4917,17 +4998,32 @@ function SnufsTab({ snufsLog, setSnufsLog, userId }) {
   React.useEffect(() => {
     fetchOsloPollen().then(setPollen).catch(() => {});
   }, []);
+  // When the selected date changes, load that day's entry into the form.
+  React.useEffect(() => {
+    const e = snufsLog[date] || {};
+    setCongestion(e.congestion || "");
+    setWeather(e.weather || "");
+    setNotes(e.notes || "");
+  }, [date]);
   function save() {
     const entry = { congestion, weather, notes };
-    if (pollen && pollen.worst) entry.pollen = `${pollen.worst.type} ${pollen.worst.level.label}`;
-    setSnufsLog(p => ({ ...p, [today]: entry }), userId);
+    // Only attach today's live pollen when logging for today
+    if (date === today && pollen && pollen.worst) entry.pollen = `${pollen.worst.type} ${pollen.worst.level.label}`;
+    else if (snufsLog[date]?.pollen) entry.pollen = snufsLog[date].pollen;
+    setSnufsLog(p => ({ ...p, [date]: entry }), userId);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
-  const congestionOpts = [["lett", "Lett", C.green], ["medium", "Medium", C.yellow], ["tett", "Veldig tett", C.red]];
+  function deleteEntry(d) {
+    if (!window.confirm("Slette denne registreringen?")) return;
+    setSnufsLog(p => { const n = { ...p }; delete n[d]; return n; }, userId);
+    if (d === date) { setCongestion(""); setWeather(""); setNotes(""); }
+  }
+  const congestionOpts = [["ingen", "Ingen", C.muted], ["lett", "Lett", C.green], ["medium", "Medium", C.yellow], ["tett", "Veldig tett", C.red]];
   const recent = Object.entries(snufsLog).sort(([a], [b]) => b.localeCompare(a)).slice(0, 14);
   return /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
+      /*#__PURE__*/React.createElement(Inp, { label: "Dato", type: "date", value: date, onChange: setDate }),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "REGISTRER FOR I DAG"),
       pollen && pollen.worst && /*#__PURE__*/React.createElement("div", {
         style: { background: pollen.worst.level.color + "18", borderRadius: 8, padding: "8px 10px", marginBottom: 12, fontSize: 12, color: C.text }
@@ -4936,19 +5032,21 @@ function SnufsTab({ snufsLog, setSnufsLog, userId }) {
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
         congestionOpts.map(([val, lbl, col]) => /*#__PURE__*/React.createElement("div", {
           key: val, onClick: () => setCongestion(val),
-          style: { flex: 1, textAlign: "center", padding: "10px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: congestion === val ? 700 : 400, background: congestion === val ? col + "22" : C.bg, border: `1.5px solid ${congestion === val ? col : C.border}`, color: congestion === val ? col : C.muted }
+          style: { flex: 1, textAlign: "center", padding: "10px 2px", borderRadius: 8, cursor: "pointer", fontSize: 12, fontWeight: congestion === val ? 700 : 400, background: congestion === val ? col + "22" : C.bg, border: `1.5px solid ${congestion === val ? col : C.border}`, color: congestion === val ? col : C.muted }
         }, lbl))),
       /*#__PURE__*/React.createElement(Inp, { label: "Utendørsvær", value: weather, onChange: setWeather, placeholder: "f.eks. sol og vind, regn, overskyet" }),
       /*#__PURE__*/React.createElement(Txta, { label: "Notater", value: notes, onChange: setNotes, rows: 2, placeholder: "Symptomer, medisin tatt, hvordan det påvirket trening ..." }),
       /*#__PURE__*/React.createElement(Btn, { onClick: save, color: C.green, style: { width: "100%", marginTop: 8 } }, saved ? "Lagret ✓" : "Lagre")),
     recent.length > 0 && /*#__PURE__*/React.createElement(Card, null,
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE REGISTRERINGER"),
-      recent.map(([date, e]) => {
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE REGISTRERINGER (trykk for å endre)"),
+      recent.map(([d, e]) => {
         const cOpt = congestionOpts.find(o => o[0] === e.congestion);
-        return /*#__PURE__*/React.createElement("div", { key: date, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12 } },
-          /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, color: C.text } }, formatDateShort(date)),
-            e.pollen && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "🤧 ", e.pollen), e.weather && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, e.weather)),
-          cOpt && /*#__PURE__*/React.createElement("span", { style: { color: cOpt[2], fontWeight: 700 } }, cOpt[1]));
+        return /*#__PURE__*/React.createElement("div", { key: d, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12, background: d === date ? C.accent + "10" : "transparent", borderRadius: d === date ? 6 : 0 } },
+          /*#__PURE__*/React.createElement("div", { onClick: () => setDate(d), style: { flex: 1, cursor: "pointer" } }, /*#__PURE__*/React.createElement("div", { style: { fontWeight: 600, color: C.text } }, formatDateShort(d)),
+            e.pollen && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "🤧 ", e.pollen), e.weather && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted } }, e.weather), e.notes && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontStyle: "italic" } }, e.notes)),
+          /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+            cOpt && /*#__PURE__*/React.createElement("span", { style: { color: cOpt[2], fontWeight: 700 } }, cOpt[1]),
+            /*#__PURE__*/React.createElement("span", { onClick: () => deleteEntry(d), style: { color: C.muted, cursor: "pointer", fontSize: 14, padding: "0 2px" } }, "\u2715")));
       })));
 }
 
@@ -4980,19 +5078,31 @@ function cyclePhase(mensLog, dateStr) {
 
 function MensTab({ mensLog, setMensLog, userId }) {
   const today = todayStr();
-  const existing = mensLog[today] || {};
+  const [date, setDate] = React.useState(today);
+  const existing = mensLog[date] || {};
   const [isStart, setIsStart] = React.useState(!!existing.start);
   const [flow, setFlow] = React.useState(existing.flow || "");
   const [symptoms, setSymptoms] = React.useState(existing.symptoms || "");
   const [saved, setSaved] = React.useState(false);
+  React.useEffect(() => {
+    const e = mensLog[date] || {};
+    setIsStart(!!e.start);
+    setFlow(e.flow || "");
+    setSymptoms(e.symptoms || "");
+  }, [date]);
   function save() {
-    setMensLog(p => ({ ...p, [today]: { start: isStart, flow, symptoms } }), userId);
+    setMensLog(p => ({ ...p, [date]: { start: isStart, flow, symptoms } }), userId);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
+  function deleteEntry(d) {
+    if (!window.confirm("Slette denne registreringen?")) return;
+    setMensLog(p => { const n = { ...p }; delete n[d]; return n; }, userId);
+    if (d === date) { setIsStart(false); setFlow(""); setSymptoms(""); }
+  }
   const phase = cyclePhase(mensLog, today);
   const flowOpts = [["lett", "Lett"], ["moderat", "Moderat"], ["kraftig", "Kraftig"]];
-  const recentStarts = Object.entries(mensLog).filter(([, e]) => e.start).sort(([a], [b]) => b.localeCompare(a)).slice(0, 6);
+  const recentEntries = Object.entries(mensLog).sort(([a], [b]) => b.localeCompare(a)).slice(0, 10);
   return /*#__PURE__*/React.createElement("div", null,
     phase && /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16, borderLeft: `4px solid ${phase.color}` } },
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 } },
@@ -5000,10 +5110,10 @@ function MensTab({ mensLog, setMensLog, userId }) {
         /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Syklusdag ", phase.cycleDay, " / ~", phase.cycleLen)),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.text, lineHeight: 1.5 } }, phase.advice)),
     /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 16 } },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "REGISTRER FOR I DAG"),
+      /*#__PURE__*/React.createElement(Inp, { label: "Dato", type: "date", value: date, onChange: setDate }),
       /*#__PURE__*/React.createElement("div", {
         onClick: () => setIsStart(!isStart),
-        style: { display: "flex", alignItems: "center", gap: 8, padding: "10px", borderRadius: 8, cursor: "pointer", background: isStart ? C.red + "18" : C.bg, border: `1.5px solid ${isStart ? C.red : C.border}`, marginBottom: 12 }
+        style: { display: "flex", alignItems: "center", gap: 8, padding: "10px", borderRadius: 8, cursor: "pointer", background: isStart ? C.red + "18" : C.bg, border: `1.5px solid ${isStart ? C.red : C.border}`, marginBottom: 12, marginTop: 4 }
       }, /*#__PURE__*/React.createElement("span", { style: { fontSize: 16 } }, isStart ? "🔴" : "⚪"), /*#__PURE__*/React.createElement("span", { style: { fontSize: 13, fontWeight: 600, color: isStart ? C.red : C.muted } }, "Første dag i mensen (syklusstart)")),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 6 } }, "Blødning"),
       /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 6, marginBottom: 14 } },
@@ -5013,11 +5123,15 @@ function MensTab({ mensLog, setMensLog, userId }) {
         }, lbl))),
       /*#__PURE__*/React.createElement(Txta, { label: "Symptomer (valgfritt)", value: symptoms, onChange: setSymptoms, rows: 2, placeholder: "Kramper, hodepine, humør, energi ..." }),
       /*#__PURE__*/React.createElement(Btn, { onClick: save, color: C.green, style: { width: "100%", marginTop: 8 } }, saved ? "Lagret ✓" : "Lagre")),
-    recentStarts.length > 0 && /*#__PURE__*/React.createElement(Card, null,
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE SYKLUSSTART"),
-      recentStarts.map(([date, e]) => /*#__PURE__*/React.createElement("div", { key: date, style: { display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12 } },
-        /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600, color: C.text } }, formatDateShort(date)),
-        e.flow && /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, e.flow)))));
+    recentEntries.length > 0 && /*#__PURE__*/React.createElement(Card, null,
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 10 } }, "SISTE REGISTRERINGER (trykk for å endre)"),
+      recentEntries.map(([d, e]) => /*#__PURE__*/React.createElement("div", { key: d, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}`, fontSize: 12, background: d === date ? C.accent + "10" : "transparent", borderRadius: d === date ? 6 : 0 } },
+        /*#__PURE__*/React.createElement("div", { onClick: () => setDate(d), style: { flex: 1, cursor: "pointer" } },
+          /*#__PURE__*/React.createElement("span", { style: { fontWeight: 600, color: C.text } }, e.start ? "🔴 " : "", formatDateShort(d)),
+          e.symptoms && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontStyle: "italic" } }, e.symptoms)),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 } },
+          e.flow && /*#__PURE__*/React.createElement("span", { style: { color: C.muted } }, e.flow),
+          /*#__PURE__*/React.createElement("span", { onClick: () => deleteEntry(d), style: { color: C.muted, cursor: "pointer", fontSize: 14, padding: "0 2px" } }, "\u2715"))))));
 }
 
 // ─── STRENGTH (fritekst-logg i Logg-fanen) ───────────────────────────────────
@@ -5859,11 +5973,11 @@ function LogTab({
       style: {
         color: C.green
       }
-    }, "\u2191", iv.elev, "m"), iv.pace && iv.elev && iv.dur && iv.dur.includes("km") && calcGAP(iv.pace, iv.elev, parseFloat(iv.dur)) && /*#__PURE__*/React.createElement("span", {
+    }, "\u2191", iv.elev, "m"), intervalGAP(iv) && /*#__PURE__*/React.createElement("span", {
       style: {
         color: C.muted
       }
-    }, "GAP ", calcGAP(iv.pace, iv.elev, parseFloat(iv.dur)))))), s.notes && /*#__PURE__*/React.createElement("div", {
+    }, "GAP ", intervalGAP(iv))))), s.notes && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: C.muted,
@@ -7284,83 +7398,8 @@ function ProfileTab({
     /*#__PURE__*/React.createElement(Inp, { label: "Athlete-ID (la stå 0 for din egen konto)", value: icuAthleteId, onChange: v => setIcuAthleteId(v, userId), placeholder: "0" }),
     /*#__PURE__*/React.createElement(Btn, { onClick: syncIntervals, color: icuApiKey && icuBackend ? "#3b82f6" : C.muted, style: { width: "100%", color: "#fff", marginTop: 4 } }, icuSyncing ? "\u23F3 Synkroniserer..." : "\uD83D\uDD04 Synkroniser fra intervals.icu"),
     icuResult && /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: icuResult.type === "error" ? C.red : C.green, marginTop: 8 } }, icuResult.msg)
-  ),
-  /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
-    /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
-      /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: "#FC4C02", fontWeight: 700 } }, "\uD83D\uDFE0 STRAVA"),
-      /*#__PURE__*/React.createElement("button", {
-        onClick: () => {
-          const turningOff = stravaEnabled;
-          setStravaEnabled(!stravaEnabled, userId);
-          if (turningOff) {
-            // Remove Strava-sourced sessions to avoid duplicates with intervals.icu
-            setSessions(p => {
-              const filtered = p.filter(s => !s.stravaId);
-              if (userId && sbUrl() && sbKey()) saveToSupabase(userId, "nm_sessions", filtered);
-              return filtered;
-            }, userId);
-          }
-        },
-        style: { border: "none", borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: 700, cursor: "pointer", background: stravaEnabled ? "#FC4C02" : C.border, color: stravaEnabled ? "#fff" : C.muted }
-      }, stravaEnabled ? "PÅ" : "AV")
-    ),
-    !stravaEnabled && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginTop: 8 } }, "Strava er satt på pause. Innstillingene beholdes \u2013 trykk PÅ for å bruke den igjen."),
-    stravaEnabled && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8 } },
-    /*#__PURE__*/React.createElement(Inp, {
-    label: "Vercel backend URL",
-    value: backendUrl,
-    onChange: v => setBackendUrl(v, userId),
-    placeholder: "https://nm-strava-sync.vercel.app"
-  }), stravaTokens?.access_token ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      marginBottom: 8
-    }
-  }, /*#__PURE__*/React.createElement(Badge, {
-    label: "\u2713 TILKOBLET",
-    color: C.green
-  }), /*#__PURE__*/React.createElement(Btn, {
-    onClick: () => setStravaTokens(null),
-    small: true,
-    color: C.red
-  }, "Koble fra")) : /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement(Btn, {
-    onClick: connectStrava,
-    color: "#FC4C02",
-    style: {
-      color: "#fff",
-      marginBottom: showManual ? 10 : 0
-    }
-  }, "\uD83D\uDFE0 Koble til Strava"), showManual && /*#__PURE__*/React.createElement("div", {
-    style: {
-      marginTop: 8
-    }
-  }, /*#__PURE__*/React.createElement(Txta, {
-    value: manualToken,
-    onChange: setManualToken,
-    rows: 2,
-    placeholder: "Lim inn URL..."
-  }), /*#__PURE__*/React.createElement(Btn, {
-    onClick: pasteCallback,
-    color: C.green,
-    style: {
-      width: "100%"
-    }
-  }, "\u2713 Bekreft"))), /*#__PURE__*/React.createElement(Btn, {
-    onClick: syncStrava,
-    color: stravaTokens?.access_token ? C.green : C.muted,
-    style: {
-      width: "100%",
-      marginTop: 8
-    }
-  }, syncing ? "⏳ Synkroniserer..." : "🔄 Synkroniser fra Strava"), syncResult && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: syncResult.type === "error" ? C.red : C.green,
-      marginTop: 8
-    }
-  }, syncResult.msg))));
+  )
+  );
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
