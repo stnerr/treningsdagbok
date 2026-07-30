@@ -93,6 +93,19 @@ async function loadFromSupabase(uid) {
   }
   return r;
 }
+
+// Admin connection defaults: saved once via "Lagre som standard", then applied
+// automatically on future admin logins (on any device) if the fields are empty,
+// so you don't have to paste long URLs/keys again. Stored in a dedicated
+// localStorage key that login/logout never clears.
+const ADMIN_DEFAULTS_KEY = "nm_admin_defaults";
+function saveAdminDefaults(obj) {
+  try { localStorage.setItem(ADMIN_DEFAULTS_KEY, JSON.stringify(obj)); return true; } catch { return false; }
+}
+function getAdminDefaults() {
+  try { return JSON.parse(localStorage.getItem(ADMIN_DEFAULTS_KEY) || "null"); } catch { return null; }
+}
+
 async function saveToSupabase(uid, key, value) {
   if (!sbUrl() || !sbKey() || !uid) return;
   // on_conflict names the unique columns so PostgREST performs an UPSERT
@@ -4283,8 +4296,8 @@ function CalendarTab({
             plans.length > 3 && /*#__PURE__*/React.createElement("div", { style: { fontSize: 9, color: C.muted } }, "+", plans.length - 3));
         })),
       /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 10, textAlign: "center" } }, "Trykk på en dag for å se og redigere økter"),
-      selDate && /*#__PURE__*/React.createElement(EditModal, null),
-      movingSession && /*#__PURE__*/React.createElement(MoveModal, null));
+      selDate && EditModal(),
+      movingSession && MoveModal());
   }
   if (viewMode === "list") {
     const dates = Array.from({
@@ -4390,7 +4403,7 @@ function CalendarTab({
           fontSize: 18
         }
       }, "\u203A")));
-    }), selDate && /*#__PURE__*/React.createElement(EditModal, null));
+    }), selDate && EditModal());
   }
 
   // Calendar grid (Monday-first)
@@ -4576,7 +4589,7 @@ function CalendarTab({
       borderRadius: "50%",
       background: color
     }
-  }), label))), /*#__PURE__*/React.createElement(InfoPanel, null), selDate && /*#__PURE__*/React.createElement(EditModal, null), movingSession && /*#__PURE__*/React.createElement(MoveModal, null));
+  }), label))), InfoPanel(), selDate && EditModal(), movingSession && MoveModal());
 
   function MoveModal() {
     return /*#__PURE__*/React.createElement("div", {
@@ -6688,6 +6701,7 @@ function ProfileTab({
   const [syncUserId, setSyncUserId] = useStore("nm_user_id", "");
   const [userIdInput, setUserIdInput] = React.useState(syncUserId);
   const [connTest, setConnTest] = React.useState(null);
+  const [defaultsSaved, setDefaultsSaved] = React.useState("");
   const [connTesting, setConnTesting] = React.useState(false);
 
   // Training prefs
@@ -7398,6 +7412,21 @@ function ProfileTab({
     /*#__PURE__*/React.createElement(Inp, { label: "Athlete-ID (la stå 0 for din egen konto)", value: icuAthleteId, onChange: v => setIcuAthleteId(v, userId), placeholder: "0" }),
     /*#__PURE__*/React.createElement(Btn, { onClick: syncIntervals, color: icuApiKey && icuBackend ? "#3b82f6" : C.muted, style: { width: "100%", color: "#fff", marginTop: 4 } }, icuSyncing ? "\u23F3 Synkroniserer..." : "\uD83D\uDD04 Synkroniser fra intervals.icu"),
     icuResult && /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, color: icuResult.type === "error" ? C.red : C.green, marginTop: 8 } }, icuResult.msg)
+  ), /*#__PURE__*/React.createElement(Card, { style: { marginBottom: 12 } },
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 6 } }, "\u2699\uFE0F ADMIN-STANDARD"),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 10, lineHeight: 1.5 } }, "Lagre synk-innstillingene over som standard. Da fylles de inn automatisk neste gang du logger inn som admin, s\xE5 du slipper \xE5 lime inn lenker og n\xF8kler p\xE5 nytt."),
+    /*#__PURE__*/React.createElement(Btn, {
+      onClick: () => {
+        const ok = saveAdminDefaults({
+          supabaseUrl: supabaseUrl, supabaseKey: supabaseKey, userId: syncUserId,
+          icuBackend: icuBackend, icuApiKey: icuApiKey, icuAthleteId: icuAthleteId
+        });
+        setDefaultsSaved(ok ? "ok" : "err");
+        setTimeout(() => setDefaultsSaved(""), 3000);
+      },
+      color: C.green, style: { width: "100%" }
+    }, defaultsSaved === "ok" ? "Lagret som standard \u2713" : defaultsSaved === "err" ? "Kunne ikke lagre" : "\uD83D\uDCBE Lagre som standard"),
+    getAdminDefaults() && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8, textAlign: "center" } }, "Standard er lagret. Fylles inn automatisk ved admin-innlogging.")
   )
   );
 }
@@ -7850,6 +7879,25 @@ function App() {
   const [loginErr, setLoginErr] = React.useState("");
   function doLogin() {
     if (loginPw === "sr") {
+      // Apply saved admin connection defaults to any empty fields BEFORE the
+      // app mounts its stores, so they're picked up immediately (no reload).
+      const d = getAdminDefaults();
+      if (d) {
+        const fill = (lsKey, val, blankVals) => {
+          if (!val) return;
+          let cur = "";
+          try { cur = JSON.parse(localStorage.getItem(lsKey) || '""'); } catch { cur = ""; }
+          if (!cur || (blankVals && blankVals.includes(cur))) { try { localStorage.setItem(lsKey, JSON.stringify(val)); } catch {} }
+        };
+        fill("nm_supabase_url", d.supabaseUrl);
+        fill("nm_supabase_key", d.supabaseKey);
+        fill("nm_user_id", d.userId);
+        fill("nm_icu_backend", d.icuBackend);
+        fill("nm_icu_apikey", d.icuApiKey);
+        fill("nm_icu_athlete", d.icuAthleteId, ["0"]);
+        if (d.supabaseUrl) window.SUPABASE_URL = d.supabaseUrl;
+        if (d.supabaseKey) window.SUPABASE_ANON_KEY = d.supabaseKey;
+      }
       setAuthRole("admin");
       try { sessionStorage.setItem("nm_auth_role", "admin"); } catch {}
       setLoginErr(""); setLoginPw("");
@@ -7866,6 +7914,32 @@ function App() {
     try { sessionStorage.removeItem("nm_auth_role"); } catch {}
   }
   const isAdmin = authRole === "admin";
+  // On admin login, fill any empty sync/connection fields from saved admin
+  // defaults (see "Lagre som standard" in Profil), so links/keys don't need
+  // re-pasting. Only fills blanks — never overwrites values you've changed.
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    const d = getAdminDefaults();
+    if (!d) return;
+    const fill = (lsKey, val) => {
+      if (!val) return;
+      let cur = "";
+      try { cur = JSON.parse(localStorage.getItem(lsKey) || '""'); } catch { cur = ""; }
+      if (!cur) { try { localStorage.setItem(lsKey, JSON.stringify(val)); } catch {} }
+    };
+    fill("nm_supabase_url", d.supabaseUrl);
+    fill("nm_supabase_key", d.supabaseKey);
+    fill("nm_user_id", d.userId);
+    fill("nm_icu_backend", d.icuBackend);
+    fill("nm_icu_apikey", d.icuApiKey);
+    if (d.icuAthleteId) {
+      let cur = "0";
+      try { cur = JSON.parse(localStorage.getItem("nm_icu_athlete") || '"0"'); } catch { cur = "0"; }
+      if (!cur || cur === "0") { try { localStorage.setItem("nm_icu_athlete", JSON.stringify(d.icuAthleteId)); } catch {} }
+    }
+    if (d.supabaseUrl) window.SUPABASE_URL = d.supabaseUrl;
+    if (d.supabaseKey) window.SUPABASE_ANON_KEY = d.supabaseKey;
+  }, [isAdmin]);
   const [sessions, setSessions] = useStore("nm_sessions", []);
   const [wellness, setWellness] = useStore("nm_wellness", []);
   const [icuApiKey, setIcuApiKey] = useStore("nm_icu_apikey", "");
@@ -8388,7 +8462,7 @@ function App() {
       padding: 2
     },
     title: "Synkroniser (sky)"
-  }, "\u2601\uFE0F"), profile?.name && /*#__PURE__*/React.createElement("span", {
+  }, "\u2601\uFE0F"), /*#__PURE__*/React.createElement("span", {
     onClick: goToProfile,
     style: {
       fontSize: 13,
@@ -8400,7 +8474,7 @@ function App() {
       gap: 4
     },
     title: "Åpne profil"
-  }, "\uD83D\uDC64 ", profile.name)))), /*#__PURE__*/React.createElement("div", {
+  }, "\uD83D\uDC64 ", profile?.name || "Profil")))), /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px 14px 100px",
       maxWidth: 520,
