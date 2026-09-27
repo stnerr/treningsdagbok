@@ -3476,6 +3476,42 @@ function DashboardTab({
     }
   };
   const nut = NUTRITION[todayType] || NUTRITION.default;
+  // Race-week nutrition & hydration: if a goal race is within 7 days, show
+  // tailored fueling advice counting down to race day.
+  const nextRace = (() => {
+    const todayD = todayStr();
+    const upcoming = (goals || []).filter(g => g.date && g.date >= todayD).sort((a, b) => a.date.localeCompare(b.date));
+    if (!upcoming.length) return null;
+    const g = upcoming[0];
+    const daysTo = Math.round((new Date(g.date + "T00:00:00") - new Date(todayD + "T00:00:00")) / 86400000);
+    if (daysTo > 7) return null;
+    const km = parseFloat(g.distanceKm) || 0;
+    const isLong = km >= 30; // marathon-ish needs carb loading
+    let advice;
+    if (daysTo === 0) {
+      advice = { tag: "I DAG er løpsdagen!", lines: [
+        "3–4t før start: kjent frokost med lettfordøyelige karbo (havregrøt/hvitt brød + banan + honning). Unngå mye fiber og fett.",
+        "Drikk 5–7 ml/kg væske 2–3t før, så en liten slurk rett før start.",
+        isLong ? "Under: 30–60g karbo/t (gel/sportsdrikke) fra ca. 45–60 min. 400–800 ml væske/t etter tørste og vær." : "Under: væske etter tørste; ev. én gel midtveis på lengre distanser.",
+        "Ikke prøv noe nytt i dag — kun mat og utstyr du har testet på trening."
+      ]};
+    } else if (daysTo <= 3) {
+      advice = { tag: `${daysTo} dager til ${g.name}`, lines: [
+        isLong ? "Karboladning: øk til 7–10g karbo/kg/dag disse dagene, med mer karbo og mindre fett/fiber." : "Spis normalt, men litt ekstra karbo dagen før. Ikke overspis.",
+        "Drikk jevnt gjennom dagen så urinen er lys. Ekstra fokus på væske og litt salt de siste 1–2 dagene.",
+        "Reduser fiber de siste 1–2 dagene for roligere mage på løpsdagen.",
+        "Prioriter søvn nå — det betyr mer enn treningen denne uka."
+      ]};
+    } else {
+      advice = { tag: `${daysTo} dager til ${g.name}`, lines: [
+        "Vanlig, balansert kost med god karbotilgang rundt harde økter.",
+        isLong ? "Planlegg karboladningen fra 2–3 dager før løpet." : "Ingen spesiell laddning nødvendig for denne distansen.",
+        "Test løpsdag-frokosten og næringsstrategien på en økt denne uka hvis du ikke alt har gjort det.",
+        "Hold væskebalansen jevnt oppe hver dag."
+      ]};
+    }
+    return { g, daysTo, advice, isLong };
+  })();
   const RECOVERY = {
     intervals: {
       hours: "36–48 timer",
@@ -3628,7 +3664,15 @@ function DashboardTab({
     style: { display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }
   }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700 } }, "🩸 SYKLUS"),
     /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: cyclePhaseToday.color } }, cyclePhaseToday.phase, " · dag ", cyclePhaseToday.cycleDay)),
-    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5 } }, cyclePhaseToday.advice)), pollen && pollen.worst && /*#__PURE__*/React.createElement(Card, {
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5 } }, cyclePhaseToday.advice),
+    cyclePhaseToday.fertility && /*#__PURE__*/React.createElement("div", { style: { marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.border}` } },
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "baseline" } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700 } }, "🌸 FRUKTBARHET"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: cyclePhaseToday.fertility.color } }, cyclePhaseToday.fertility.label)),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.5, marginTop: 2 } }, cyclePhaseToday.fertility.note,
+        " Antatt eggløsning rundt syklusdag ", cyclePhaseToday.fertility.ovulationDay, "."),
+      /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: C.muted, fontStyle: "italic", marginTop: 4, lineHeight: 1.4 } }, "Grovt kalenderestimat basert på syklushistorikk — ikke pålitelig som prevensjon eller for å planlegge graviditet. Snakk med lege/jordmor for sikrere metoder.")),
+    ), pollen && pollen.worst && /*#__PURE__*/React.createElement(Card, {
     style: { marginBottom: 12, borderLeft: `4px solid ${pollen.worst.level.color}` }
   }, /*#__PURE__*/React.createElement("div", {
     style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }
@@ -3828,7 +3872,11 @@ function DashboardTab({
     style: {
       marginTop: 12
     }
-  }, [{
+  }, nextRace && /*#__PURE__*/React.createElement("div", {
+    style: { background: (nextRace.daysTo === 0 ? C.red : C.accent) + "12", border: `1px solid ${(nextRace.daysTo === 0 ? C.red : C.accent)}33`, borderRadius: 10, padding: "10px 12px", marginBottom: 12 }
+  }, /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: nextRace.daysTo === 0 ? C.red : C.accent, marginBottom: 6 } }, "🏁 ", nextRace.advice.tag),
+    nextRace.advice.lines.map((l, i) => /*#__PURE__*/React.createElement("div", { key: i, style: { fontSize: 12, color: C.text, padding: "3px 0", lineHeight: 1.5 } }, "• ", l)),
+    /*#__PURE__*/React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 6, fontStyle: "italic" } }, "Generelle råd – juster etter egen erfaring og mage.")), [{
     t: "🌅 Før",
     c: nut.before
   }, {
@@ -3921,6 +3969,7 @@ function CalendarTab({
 }) {
   const setPlannedSessions = canEdit ? _setPlannedSessions : () => alert("Logg inn for å endre.");
   const [viewMode, setViewMode] = React.useState("calendar");
+  const [calFilter, setCalFilter] = React.useState("all");
   const [curMonth, setCurMonth] = React.useState(() => {
     const d = new Date();
     return {
@@ -3947,9 +3996,11 @@ function CalendarTab({
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
   }
   function getPlans(date) {
+    if (calFilter === "done") return [];
     return getPlannedSessionsForDate(prefs, goals, profile, plannedSessions, date);
   }
   function getDone(date) {
+    if (calFilter === "planned") return [];
     return sessions.filter(s => s.date === date);
   }
   function openDate(date) {
@@ -4295,6 +4346,11 @@ function CalendarTab({
           /*#__PURE__*/React.createElement(Btn, { onClick: () => setCurMonth({ year: new Date().getFullYear(), month: new Date().getMonth() }), small: true, color: C.muted }, "I dag"),
           /*#__PURE__*/React.createElement(Btn, { onClick: nextMonth, small: true, color: C.muted }, "\u203A"),
           /*#__PURE__*/React.createElement(Btn, { onClick: () => setViewMode("calendar"), small: true, color: C.accent, outline: true, style: { fontSize: 11 } }, "\uD83D\uDCC5"))),
+      /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 5, marginBottom: 10 } },
+        [["all", "Alle"], ["planned", "Planlagte"], ["done", "Gjennomførte"]].map(([val, lbl]) => /*#__PURE__*/React.createElement("button", {
+          key: val, onClick: () => setCalFilter(val),
+          style: { flex: 1, border: `1.5px solid ${calFilter === val ? C.accent : C.border}`, background: calFilter === val ? C.accent + "15" : C.surface, color: calFilter === val ? C.accent : C.muted, borderRadius: 8, padding: "6px 4px", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+        }, lbl))),
       /*#__PURE__*/React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(7,1fr)", borderTop: `1px solid ${C.border}`, borderLeft: `1px solid ${C.border}` } },
         CAL_DAYS.map(d => /*#__PURE__*/React.createElement("div", { key: "h" + d, style: { textAlign: "center", fontSize: 10, color: C.muted, fontWeight: 700, padding: "4px 0", borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, textTransform: "lowercase" } }, d)),
         cells.map((day, i) => {
@@ -4461,6 +4517,12 @@ function CalendarTab({
     color: C.accent,
     outline: true
   }, "\u2630"))), /*#__PURE__*/React.createElement("div", {
+    style: { display: "flex", gap: 5, marginBottom: 12 }
+  }, [["all", "Alle"], ["planned", "Planlagte"], ["done", "Gjennomførte"]].map(([val, lbl]) => /*#__PURE__*/React.createElement("button", {
+    key: val,
+    onClick: () => setCalFilter(val),
+    style: { flex: 1, border: `1.5px solid ${calFilter === val ? C.accent : C.border}`, background: calFilter === val ? C.accent + "15" : C.surface, color: calFilter === val ? C.accent : C.muted, borderRadius: 8, padding: "6px 4px", fontSize: 12, fontWeight: 700, cursor: "pointer" }
+  }, lbl))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       justifyContent: "space-between",
@@ -5107,7 +5169,26 @@ function cyclePhase(mensLog, dateStr) {
   else if (cycleDay <= Math.round(cycleLen / 2) - 1) { phase = "Follikkelfase"; color = C.green; advice = "Ofte høyest energi og god restitusjon nå — gunstig tid for harde intervaller, terskeløkter og å bygge belastning."; }
   else if (cycleDay <= Math.round(cycleLen / 2) + 1) { phase = "Eggløsning"; color = C.accent; advice = "Toppform for styrke og fart, men litt økt skaderisiko rundt eggløsning — god oppvarming før hardøkter."; }
   else { phase = "Lutealfase"; color = C.yellow; advice = "Kroppstemperatur og hvilepuls kan være litt høyere, og opplevd anstrengelse høyere. Rolige/moderate økter kan føles tyngre enn tallene tilsier — juster etter dagsform."; }
-  return { cycleDay, cycleLen, phase, advice, color, lastStart };
+  // Fertility estimate (calendar method): ovulation ~14 days before the next
+  // expected period; fertile window = 5 days before ovulation through 1 day
+  // after (sperm survival + egg viability). This is a rough statistical
+  // estimate, NOT a reliable contraception or conception method.
+  const ovulationDay = cycleLen - 14; // cycle-day number of estimated ovulation
+  const fertileStart = ovulationDay - 5;
+  const fertileEnd = ovulationDay + 1;
+  let fertility;
+  if (cycleDay >= fertileStart && cycleDay <= fertileEnd) {
+    if (cycleDay === ovulationDay) fertility = { level: "høy", label: "Antatt eggløsning i dag", color: C.red, note: "Størst sjanse for å bli gravid rundt nå." };
+    else fertility = { level: "høy", label: "Fruktbar fase", color: C.orange, note: "Økt sjanse for graviditet disse dagene." };
+  } else if (cycleDay >= fertileStart - 2 && cycleDay < fertileStart) {
+    fertility = { level: "middels", label: "Nærmer seg fruktbar fase", color: C.yellow, note: "Fruktbar fase begynner om få dager." };
+  } else {
+    fertility = { level: "lav", label: "Lav sannsynlighet", color: C.green, note: "Utenfor antatt fruktbar fase." };
+  }
+  fertility.ovulationDay = ovulationDay;
+  fertility.windowStart = fertileStart;
+  fertility.windowEnd = fertileEnd;
+  return { cycleDay, cycleLen, phase, advice, color, lastStart, fertility };
 }
 
 function MensTab({ mensLog, setMensLog, userId }) {
@@ -5323,6 +5404,7 @@ function LogTab({
     gradePct: "",
     bikeKmh: "",
     bikeWatts: "",
+    avgWatts: "",
     swimPace: "",
     notes: "",
     rpe: "5",
@@ -5600,17 +5682,26 @@ function LogTab({
       fontWeight: 600,
       marginBottom: 4
     }
-  }, "Est. watt (auto)"), /*#__PURE__*/React.createElement("div", {
+  }, form.avgWatts ? "Snittwatt (målt)" : "Est. watt (auto)"), /*#__PURE__*/React.createElement("div", {
     style: {
       background: C.bg,
       border: `1.5px solid ${C.border}`,
       borderRadius: 8,
       padding: "8px 12px",
-      color: form.bikeWatts ? C.orange : C.muted,
+      color: form.avgWatts || form.bikeWatts ? C.orange : C.muted,
       fontSize: 14,
       fontWeight: 700
     }
-  }, form.bikeWatts ? "~" + form.bikeWatts + " W" : "–"))), /*#__PURE__*/React.createElement(Inp, {
+  }, form.avgWatts ? form.avgWatts + " W" : form.bikeWatts ? "~" + form.bikeWatts + " W" : "–"))), /*#__PURE__*/React.createElement(Inp, {
+    label: "Snittwatt (målt, valgfritt)",
+    type: "number",
+    value: form.avgWatts || "",
+    onChange: v => setForm(p => ({
+      ...p,
+      avgWatts: v
+    })),
+    placeholder: "fra sykkelcomputer/rulle"
+  }), /*#__PURE__*/React.createElement(Inp, {
     label: "H\xF8ydemeter (m)",
     type: "number",
     value: form.elevGain,
@@ -5904,7 +5995,7 @@ function LogTab({
         color: C.orange,
         marginTop: 2
       }
-    }, s.km, "km", s.bikeKmh ? " · " + s.bikeKmh + " km/t" : "", s.bikeWatts ? " · ~" + s.bikeWatts + "W" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : ""), s.sport === "swim" && s.km && /*#__PURE__*/React.createElement("div", {
+    }, s.km, "km", s.bikeKmh ? " · " + s.bikeKmh + " km/t" : "", s.avgWatts ? " · " + s.avgWatts + "W" : s.bikeWatts ? " · ~" + s.bikeWatts + "W" : "", s.elevGain ? " · ↑" + s.elevGain + "m" : ""), s.sport === "swim" && s.km && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 12,
         color: "#0891b2",
@@ -7710,6 +7801,23 @@ function StatsTab({ sessions, wellness, goals }) {
   });
   const hasFitData = fitData.some(t => t.monthly.some(m => m.pace != null));
 
+  // Indoor-cycling watt trend: average power per period. Uses real power
+  // (avgWatts from intervals.icu or manual entry), preferring measured over
+  // the physics estimate. "Indoor" = VirtualRide, or any bike session that has
+  // a watt value (rollers/trainer sessions usually do).
+  const isIndoorBike = (s) => s.type === "bike" && (/(virtual|indoor)/i.test(s.sportType || "") || s.avgWatts || s.bikeWatts);
+  const wattData = fitPeriods.map(mk => {
+    const ms = sessions.filter(s => isIndoorBike(s) && fitKeyOf(s.date) === mk);
+    const vals = ms.map(s => parseFloat(s.avgWatts) || parseFloat(s.bikeWatts) || 0).filter(v => v > 0);
+    const elevs = ms.map(s => parseFloat(s.elevGain) || 0).filter(v => v > 0);
+    return {
+      watt: vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null,
+      elev: elevs.length ? Math.round(elevs.reduce((a, b) => a + b, 0) / elevs.length) : null,
+      count: ms.length
+    };
+  });
+  const hasWattData = wattData.some(w => w.watt != null);
+
   return /*#__PURE__*/React.createElement("div", null,
     /*#__PURE__*/React.createElement("h3", { style: { color: C.text, fontWeight: 800, marginBottom: 16 } }, "\uD83D\uDCC8 Statistikk"),
 
@@ -7850,7 +7958,45 @@ function StatsTab({ sessions, wellness, goals }) {
       )
     ),
 
-    // ── Form curve (CTL/ATL/TSB) moved in from the Form tab ──
+    // ── Indoor cycling watt trend ──
+    hasWattData && (() => {
+      const present = wattData.filter(w => w.watt != null).map(w => w.watt);
+      const min = Math.min(...present), max = Math.max(...present);
+      const range = (max - min) || 1;
+      const W = 300, H = 70, pad = 12;
+      const pts = wattData.map((w, i) => w.watt == null ? null : {
+        x: pad + (i / (wattData.length - 1)) * (W - pad * 2),
+        y: pad + (1 - (w.watt - min) / range) * (H - pad * 2),
+        v: w.watt
+      }).filter(Boolean);
+      const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+      const first = wattData.find(w => w.watt != null);
+      const last = [...wattData].reverse().find(w => w.watt != null);
+      const improving = first && last && first !== last ? last.watt > first.watt : null;
+      const monthNames = ["jan","feb","mar","apr","mai","jun","jul","aug","sep","okt","nov","des"];
+      return /*#__PURE__*/React.createElement(Card, { style: { marginTop: 16 } },
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 4 } }, "INNENDØRSSYKKEL – SNITTWATT"),
+        /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 10 } }, "Høyere watt over tid = bedre form på sykkelen."),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 } },
+          /*#__PURE__*/React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color: C.orange } }, "Snittwatt"),
+          improving != null && /*#__PURE__*/React.createElement("span", { style: { fontSize: 11, color: improving ? C.green : C.muted } }, improving ? "↗ sterkere" : "→ stabil")),
+        /*#__PURE__*/React.createElement("svg", { viewBox: `0 0 ${W} ${H}`, style: { width: "100%", height: "auto", display: "block", background: C.bg, borderRadius: 6 } },
+          /*#__PURE__*/React.createElement("path", { d: path, fill: "none", stroke: C.orange, strokeWidth: 2 }),
+          ...pts.map((p, i) => /*#__PURE__*/React.createElement("circle", { key: i, cx: p.x, cy: p.y, r: 2.5, fill: C.orange })),
+          ...pts.map((p, i) => /*#__PURE__*/React.createElement("text", { key: "t" + i, x: p.x, y: p.y - 5, fontSize: 8, fill: C.orange, textAnchor: "middle", fontWeight: 700 }, p.v))),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 9, color: C.muted, marginTop: 4, borderTop: `1px solid ${C.border}`, paddingTop: 6 } },
+          wattData.map((w, i) => {
+            const mk = fitPeriods[i];
+            const lbl = grouping === "week" ? mk.slice(5).replace("-", "/") : monthNames[parseInt(mk.slice(5)) - 1];
+            return /*#__PURE__*/React.createElement("span", { key: i, style: { flex: 1, textAlign: "center", fontSize: grouping === "week" ? 8 : 9 } }, lbl);
+          })),
+        /*#__PURE__*/React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted, marginTop: 6 } },
+          first && /*#__PURE__*/React.createElement("span", null, "Start: ", first.watt, " W"),
+          last && /*#__PURE__*/React.createElement("span", null, "Nå: ", last.watt, " W")),
+        wattData.some(w => w.elev != null) && /*#__PURE__*/React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 8, borderTop: `1px solid ${C.border}`, paddingTop: 8 } },
+          "Snitt høydemeter per økt: ", (() => { const es = wattData.filter(w => w.elev != null).map(w => w.elev); return Math.round(es.reduce((a, b) => a + b, 0) / es.length); })(), " m"));
+    })(),
+
     wellness && wellness.length > 0 && (() => {
       const rows = [...wellness].filter(w => w.ctl != null || w.atl != null).sort((a, b) => a.date.localeCompare(b.date)).slice(-90);
       if (rows.length < 2) return null;
