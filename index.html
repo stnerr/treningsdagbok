@@ -709,6 +709,69 @@ function Btn({
 // ─── TRAINING PROGRAMS ────────────────────────────────────────────────────────
 // dow: 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
 // Each week is an object keyed by day-of-week → array of sessions
+
+// Blummenfelt-inspirert 12-måneders allround-program. 52 uker delt i 6 blokker.
+// Hver blokk har en fast ukesstruktur (mandag–søndag) med en hovedintervalløkt
+// som varierer med blokkens fokus. 3+1-belastning: hver 4. uke er en lettere uke.
+function buildBlummenfeltWeeks() {
+  // Faste økter som går igjen (dow-nøkler: 1=man ... 0=søn)
+  const mon = [{ type: "rest", label: "🧘 Hvile / mobilitet", desc: "15–20 min mobilitet eller full hvile · Sone 1", intensity: "easy" }];
+  const wed = (minutes) => [{ type: "bike", label: `🚴 Sykkel ${minutes} min + Styrke A`, desc: `${minutes} min rolig sykling (Sone 2, jevn tråkkfrekvens) + Styrke A etterpå eller senere samme dag`, intensity: "easy" }];
+  const thu = [{ type: "easy", label: "🌿 Rolig løp 50 min + Styrke B", desc: "50 min rolig løping (Sone 2) + Styrke B. Ingen maksing.", intensity: "easy" }];
+  const fri = [{ type: "bike", label: "🚴 Restitusjonssykkel 60 min", desc: "60 min lett (Sone 1–2). Du skal føle deg bedre etter enn før.", intensity: "easy" }];
+  const satBike = (minutes) => [{ type: "bike", label: `🚴 Langtur sykkel ${minutes} min`, desc: `${minutes} min jevn Sone 2. Fokus på jevn intensitet og ernæring (30–60 g karbo/t).`, intensity: "medium" }];
+  const sunRun = (minutes) => [{ type: "long", label: `🏔️ Langtur løp ${minutes} min`, desc: `${minutes} min rolig (Sone 2). Reduser hvis gårsdagens sykkel-langtur ga mye belastning.`, intensity: "medium" }];
+  // Tirsdagens nøkkeløkt per blokk
+  const intervalByBlock = {
+    1: { type: "intervals", label: "🏃 Terskel 3×8 min", desc: "3×8 min terskel (RPE 7–8, Effort 4) · 2–3 min rolig pause · 15 min oppvarming + 10–15 min nedjogg", intensity: "hard" },
+    2: { type: "intervals", label: "🏃 Terskel 4×8 min", desc: "4×8 min terskel (RPE 7–8, Effort 4) · 2–3 min rolig pause · 15 min oppvarming + nedjogg", intensity: "hard" },
+    3: { type: "intervals", label: "🏃 VO₂-maks 5×3 min", desc: "5×3 min VO₂-maks (RPE 8–9, Effort 5) · 2–3 min rolig pause · god oppvarming + nedjogg", intensity: "hard" },
+    4: { type: "intervals", label: "🏃 Terskel 4×8 min", desc: "4×8 min terskel (RPE 7–8) · 2–3 min pause. Allround-blokk – styrke prioriteres denne perioden.", intensity: "hard" },
+    5: { type: "intervals", label: "🏃 Terskel/VO₂ veksling", desc: "4×8 min terskel ELLER 5×3 min VO₂-maks (veksle uke for uke) · god oppvarming + nedjogg", intensity: "hard" },
+    6: { type: "intervals", label: "🏃 Kvalitet (vedlikehold)", desc: "Redusert kvalitet: 3×8 min terskel i rolige uker, testøkt i testuker. Senk volum mot slutten.", intensity: "hard" }
+  };
+  // Blokkdefinisjon: uker (1-indeksert start), blokknr, langtur-sykkel og langtur-løp min
+  const blocks = [
+    { from: 1, to: 8, block: 1, satMin: 135, sunMin: 65 },
+    { from: 9, to: 16, block: 2, satMin: 165, sunMin: 80 },
+    { from: 17, to: 24, block: 3, satMin: 165, sunMin: 85 },
+    { from: 25, to: 32, block: 4, satMin: 150, sunMin: 75 },
+    { from: 33, to: 44, block: 5, satMin: 180, sunMin: 85 },
+    { from: 45, to: 52, block: 6, satMin: 150, sunMin: 75 }
+  ];
+  const weeks = [];
+  for (let w = 1; w <= 52; w++) {
+    const b = blocks.find(x => w >= x.from && w <= x.to);
+    const isLight = (w % 4 === 0); // hver 4. uke lettere (3+1)
+    const key = intervalByBlock[b.block];
+    // Lett uke: fjern VO₂/reduser, kort ned langturer, behold rolig aktivitet
+    const tue = isLight
+      ? [{ type: "easy", label: "🌿 Lett uke: rolig løp 40 min", desc: "Lettere uke (3+1). Dropp hardøkten – 40 min rolig (Sone 2), eller 2–3 korte drag hvis du føler deg sterk.", intensity: "easy" }]
+      : [key];
+    const satMin = isLight ? Math.round(b.satMin * 0.65) : b.satMin;
+    const sunMin = isLight ? Math.round(b.sunMin * 0.7) : b.sunMin;
+    const wedMin = 90;
+    const weekObj = {
+      1: mon,
+      2: tue,
+      3: wed(wedMin),
+      4: thu,
+      5: fri,
+      6: satBike(satMin),
+      0: sunRun(sunMin)
+    };
+    // Merk blokkstart og lette uker i mandagsøkta for oversikt
+    const tags = [];
+    if (w === b.from) tags.push(`Blokk ${b.block} starter`);
+    if (isLight) tags.push("Lett uke (3+1)");
+    if (tags.length) {
+      weekObj[1] = [{ ...mon[0], desc: mon[0].desc + " · " + tags.join(" · ") }];
+    }
+    weeks.push(weekObj);
+  }
+  return weeks;
+}
+
 const PROGRAMS = {
   auto: {
     name: "Automatisk (målbasert)",
@@ -2380,6 +2443,12 @@ const PROGRAMS = {
         intensity: "hard"
       }]
     }]
+  },
+  blummenfelt_12mnd: {
+    name: "Blummenfelt Project (12 mnd allround)",
+    desc: "52-ukers utholdenhets- og allroundprogram: 6 blokker (aerobt grunnlag → terskel → VO₂-maks → styrke → toppform → testing). 9–12 t/uke med løp, sykkel og to styrkeøkter. 3+1-belastning (hver 4. uke lettere).",
+    effortNote: "Sone 1: 60–72% MHR · Sone 2: 72–80% · Sone 3: 80–87% · Sone 4 (terskel): 87–92% · Sone 5 (VO₂): 92–97%. Terskel RPE 7–8, VO₂ RPE 8–9. Styrke: hold 2–3 reps i reserve.",
+    weeks: buildBlummenfeltWeeks()
   }
 };
 function findProgramRaceDayOffset(prog, progKey) {
@@ -7227,13 +7296,13 @@ function ProfileTab({
     }),
     prefs?.midGoalId && /*#__PURE__*/React.createElement("div", { style: { fontSize: 12, color: C.muted, background: C.bg, borderRadius: 8, padding: 10 } },
       "Planen setter dette l\u00f8pet inn i programmets testl\u00f8p-uke (normalt 4 uker f\u00f8r sluttm\u00e5let), og legger automatisk til eller fjerner buffer-uker hvis kalenderavstanden ikke er akkurat 4 uker \u2013 slik at datoene stemmer.")
-  ), /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, background: C.bg, borderRadius: 10, padding: 4 } },
+  ), prefs.program === "bakken_100days" && /*#__PURE__*/React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 10, background: C.bg, borderRadius: 10, padding: 4 } },
     [["start","Jeg vet startdato"],["end","Jeg vet løpsdato"]].map(([m,l]) => /*#__PURE__*/React.createElement("button", {
       key: m,
       onClick: () => setPrefs(p => ({ ...p, programDateMode: m }), userId),
       style: { flex: 1, border: "none", borderRadius: 8, padding: "8px 0", fontSize: 13, fontWeight: 700, cursor: "pointer", background: (prefs?.programDateMode || "start") === m ? C.surface : "transparent", color: (prefs?.programDateMode || "start") === m ? C.accent : C.muted, boxShadow: (prefs?.programDateMode || "start") === m ? C.shadow : "none" }
     }, l))
-  ), (prefs?.programDateMode === "end") ? /*#__PURE__*/React.createElement(Inp, {
+  ), (prefs.program === "bakken_100days" && prefs?.programDateMode === "end") ? /*#__PURE__*/React.createElement(Inp, {
     label: "Løpsdato (siste dag i programmet)",
     type: "date",
     value: prefs?.programEndDate || "",
